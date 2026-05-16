@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Icons } from "./Icons";
 import { fmtMM, fmtDayHour } from "@/lib/utils";
 import type { Station } from "@/lib/types";
@@ -7,7 +7,6 @@ import type { Station } from "@/lib/types";
 interface Props {
   stations: Station[];
   accent: string;
-  showAI: boolean;
 }
 
 interface AlertItem {
@@ -19,10 +18,8 @@ interface AlertItem {
   icon: keyof typeof Icons;
 }
 
-export default function AlertsView({ stations, accent: _accent, showAI }: Props) {
+export default function AlertsView({ stations, accent: _accent }: Props) {
   const [threshold, setThreshold] = useState(25);
-  const [aiText, setAiText] = useState<string | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
 
   const alerts = useMemo<AlertItem[]>(() => {
     const items: AlertItem[] = [];
@@ -64,53 +61,8 @@ export default function AlertsView({ stations, accent: _accent, showAI }: Props)
     return items.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
   }, [stations, threshold]);
 
-  async function generateSummary() {
-    setAiLoading(true);
-    try {
-      const facts = stations.map((s) => {
-        const last24 = s.series.slice(-24);
-        return {
-          name: s.name,
-          site: s.site,
-          total_24h_mm: +last24.reduce((a, b) => a + b.value, 0).toFixed(1),
-          peak_mm_per_h: +Math.max(...last24.map((p) => p.value)).toFixed(1),
-          wet_hours: last24.filter((p) => p.value >= 0.2).length,
-        };
-      });
-      const prompt = `You are a hydrology analyst writing a 1-paragraph (~60 words) plain-English briefing for an Auckland Council conservation team. Summarise the past 24 hours of rainfall from these four stations. Mention which area is wettest and any operational concerns. Do not use bullet points or headers. Be concise and factual.\n\nData (JSON):\n${JSON.stringify(facts)}`;
-      const res = await fetch("/api/ai-briefing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt }) });
-      const json = await res.json() as { text?: string; error?: string };
-      setAiText(json.text?.trim() ?? json.error ?? "Summary unavailable.");
-    } catch {
-      setAiText("Summary unavailable — check connection.");
-    } finally {
-      setAiLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (showAI && !aiText) generateSummary();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showAI]);
-
   return (
     <section style={{ display: "flex", flexDirection: "column", gap: "var(--gap)" }}>
-      {showAI && (
-        <div className="ai-summary">
-          <div className="icon"><Icons.spark /></div>
-          <div className="body">
-            <div className="label">Conservation briefing · AI</div>
-            <div className="text">
-              {aiLoading ? "Generating briefing…" : aiText ?? "Click 'Regenerate' to produce a 24-hour summary."}
-            </div>
-            {!aiLoading && (
-              <button className="filter-pill" style={{ alignSelf: "flex-start", marginTop: 4 }}
-                onClick={generateSummary}>Regenerate</button>
-            )}
-          </div>
-        </div>
-      )}
-
       <div className="card">
         <div className="threshold-row">
           <span className="control-label">24h alert threshold</span>

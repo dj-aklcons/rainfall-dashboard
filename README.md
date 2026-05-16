@@ -1,6 +1,6 @@
 # Auckland Rainfall Dashboard
 
-A council-style monitoring dashboard for hourly rainfall telemetry from four Auckland rain-gauge stations (Auckland Central, Waitakere, Takapuna, Manukau). Surfaces 24h/7d/30d totals, hour-of-day heatmaps, threshold-based alerts with AI briefing, a regional map view, and per-station drill-in with line and bar charts.
+A council-style monitoring dashboard for hourly rainfall telemetry from four Auckland rain-gauge stations (Auckland Central, Waitakere, Takapuna, Manukau). Surfaces 24h/7d/30d totals, hour-of-day heatmaps, threshold-based alerts, a regional map view, and per-station drill-in with line and bar charts.
 
 Built for Auckland Libraries · Conservation Monitoring operations staff to spot heavy-rain events and surface-runoff risk fast.
 
@@ -11,17 +11,17 @@ Built for Auckland Libraries · Conservation Monitoring operations staff to spot
 | **Dashboard** | Grid of four station cards with bar charts, KPI metrics, and severity badges |
 | **Map** | Regional SVG silhouettes tinted by 24h rainfall intensity |
 | **Heatmap** | Hour-of-day mean intensity grid across all stations |
-| **Alerts** | Threshold-based warning cards + optional AI conservation briefing |
+| **Alerts** | Threshold-configurable warning cards (MetService 50 mm/24h standard) |
 | **Drill-in** | Per-station line chart, hourly bar chart, stats, and metadata |
 
 ## Tech Stack
 
-- **Framework** — Next.js 15 (App Router, React 19)
+- **Framework** — Next.js 16 (App Router, React 19)
 - **Language** — TypeScript
-- **Fonts** — Geist + Geist Mono (via `geist` package)
+- **Fonts** — Ubuntu (body), Geist Mono (data), Georgia (headings)
 - **Charts** — Custom SVG (inline React, no external chart library)
-- **Styling** — CSS custom properties (design-token driven, light/dark, compact/comfy)
-- **AI** — Anthropic API via Next.js API route (`/api/ai-briefing`)
+- **Styling** — Te Penapena design system (CSS custom properties, light/dark, compact/comfy)
+- **Data** — Auckland Council KiWIS hydrotel API (live), with mock fallback
 - **Deployment** — Vercel
 
 ## Getting Started
@@ -55,19 +55,20 @@ npm start
 
 ## Deployment
 
-Every push to `main` triggers a production deployment on **Vercel**.
+Every push to `main` triggers a production deployment on **Vercel**. No environment variables are required — the dashboard connects directly to the public Auckland Council KiWIS API.
 
-### Environment Variables
+## Data Source
 
-| Variable | Description | Required |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | Anthropic API key for the AI conservation briefing | No (feature degrades gracefully) |
+Live hourly rainfall data is fetched from the Auckland Council hydrotel KiWIS API:
 
-Set this in your Vercel project → Settings → Environment Variables, or locally in `.env.local`.
+```
+http://aklc.hydrotel.co.nz:8080/KiWIS/KiWIS
+  ?service=kisters&type=queryServices&request=getTimeseriesValues
+  &ts_id={ts_id}~Rainfall.HOURTOT&period=P30D&format=dajson
+  &returnfields=Timestamp,Value,Quality%20Code&timezone=Etc/GMT-12
+```
 
-## Data
-
-Mock data is generated deterministically from real station metadata (actual `ts_id`s and coordinates from Auckland Council hydrotel/KiWIS). In production, replace `lib/data.ts` with a live fetch to the KiWIS telemetry endpoint using `Rainfall.HOURTOT` parameter.
+The dashboard always fetches 30 days of data on load and slices it client-side for the 24h/7d/30d range views. Data is cached server-side for 5 minutes. If the KiWIS endpoint is unreachable, a mock data fallback is shown with a visible banner.
 
 ### Stations
 
@@ -80,25 +81,26 @@ Mock data is generated deterministically from real station metadata (actual `ts_
 
 ## Features
 
+- Live telemetry from Auckland Council KiWIS hydrotel API
+- Graceful mock-data fallback with banner if API is unreachable
 - Light/dark theme toggle (persisted)
-- Six accent colour presets (teal, sky, green, plum, orange, magenta)
+- Six Te Penapena accent colour presets
 - Compact/comfy density toggle
 - 24h/7d/30d range and mm/h vs cumulative unit switch
 - Per-station location filter on the dashboard
-- Refresh button (re-seeds mock data; in production triggers a telemetry refetch)
+- Refresh button re-fetches live data
 - Click-through station drill-in with trend vs prior 24h
-- Threshold-configurable alert generation (MetService 50 mm/24h heavy-rain standard)
-- Optional AI briefing paragraph on the Alerts view
+- Threshold-configurable alert generation
 
 ## Project Structure
 
 ```
 rainfall-dashboard/
 ├── app/
-│   ├── api/ai-briefing/route.ts   # Anthropic API proxy
-│   ├── globals.css                # Design tokens + all component CSS
+│   ├── api/rainfall/route.ts      # KiWIS API proxy (server-side, 5 min cache)
+│   ├── globals.css                # Te Penapena design tokens + component CSS
 │   ├── layout.tsx
-│   └── page.tsx                   # App shell (all state lives here)
+│   └── page.tsx                   # App shell — state, data fetching
 ├── components/
 │   ├── charts/
 │   │   ├── BarChart.tsx
@@ -115,7 +117,7 @@ rainfall-dashboard/
 │   ├── StationCard.tsx
 │   └── Tabs.tsx
 └── lib/
-    ├── data.ts           # Mock data generator (replace with live API)
+    ├── data.ts           # Mock fallback generator + station metadata constants
     ├── region-shapes.ts  # SVG path data for four Auckland region silhouettes
     ├── types.ts
     └── utils.ts

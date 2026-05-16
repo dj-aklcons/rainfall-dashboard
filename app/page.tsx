@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import Header from "@/components/Header";
 import ControlsBar from "@/components/ControlsBar";
 import DashboardView from "@/components/DashboardView";
@@ -7,8 +7,7 @@ import DrillView from "@/components/DrillView";
 import HeatmapView from "@/components/HeatmapView";
 import AlertsView from "@/components/AlertsView";
 import MapView from "@/components/MapView";
-import { buildStations } from "@/lib/data";
-import type { View, Range, Unit, Theme, Density, AccentPreset } from "@/lib/types";
+import type { View, Range, Unit, Theme, Density, AccentPreset, Station } from "@/lib/types";
 
 /* Te Penapena accent presets */
 const ACCENT_PRESETS: AccentPreset[] = [
@@ -34,22 +33,23 @@ export default function App() {
   const [openedId, setOpenedId] = useState<string | null>(null);
   const [range, setRange] = useState<Range>("24h");
   const [unit, setUnit] = useState<Unit>("rate");
-  const [seed, setSeed] = useState(42);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [filter, setFilter] = useState(["central", "waitakere", "takapuna", "manukau"]);
 
+  const [stations, setStations] = useState<Station[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [isMockData, setIsMockData] = useState(false);
+
   const [theme, setTheme] = useState<Theme>("light");
   const [accent, setAccent] = useState("#124E4A");
   const [density, setDensity] = useState<Density>("comfy");
-  const [showAI, setShowAI] = useState(true);
 
   // Load persisted preferences on mount
   useEffect(() => {
     setTheme(getLS<Theme>("theme", "light"));
     setAccent(getLS<string>("accent", "#124E4A"));
     setDensity(getLS<Density>("density", "comfy"));
-    setShowAI(getLS<boolean>("showAI", true));
   }, []);
 
   // Apply theme/density/accent to <html>
@@ -64,24 +64,31 @@ export default function App() {
     setLS("theme", theme);
     setLS("accent", accent);
     setLS("density", density);
-    setLS("showAI", showAI);
-  }, [theme, accent, density, showAI]);
+  }, [theme, accent, density]);
 
   const accentHex = useMemo(() => {
     const preset = ACCENT_PRESETS.find((p) => p.light === accent) ?? ACCENT_PRESETS[0];
     return theme === "dark" ? preset.dark : preset.light;
   }, [accent, theme]);
 
-  const stations = useMemo(() => buildStations(seed), [seed]);
-
-  function handleRefresh() {
+  const fetchRainfallData = useCallback(async () => {
     setRefreshing(true);
-    setTimeout(() => {
-      setSeed((s) => s + 1);
+    try {
+      const res = await fetch("/api/rainfall");
+      const json = (await res.json()) as { stations: Station[]; isMockData: boolean };
+      setStations(json.stations);
+      setIsMockData(json.isMockData);
       setLastUpdated(new Date());
+    } catch {
+      setIsMockData(true);
+    } finally {
       setRefreshing(false);
-    }, 900);
-  }
+      setDataLoading(false);
+    }
+  }, []);
+
+  // Fetch on mount
+  useEffect(() => { fetchRainfallData(); }, [fetchRainfallData]);
 
   function toggleFilter(id: string) {
     setFilter((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]));
@@ -94,10 +101,51 @@ export default function App() {
 
   const openedStation = useMemo(() => stations.find((s) => s.id === openedId), [openedId, stations]);
 
+  if (dataLoading) {
+    return (
+      <div style={{
+        minHeight: "100vh",
+        background: "var(--surface-sidebar)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexDirection: "column",
+        gap: 16,
+        color: "rgba(255,255,255,0.8)",
+        fontFamily: "var(--font-mono)",
+        fontSize: 13,
+        letterSpacing: "0.04em",
+      }}>
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="white" style={{ opacity: 0.7 }}>
+          <path d="M12 2.5s7 8.2 7 12.7a7 7 0 1 1-14 0C5 10.7 12 2.5 12 2.5z" />
+        </svg>
+        LOADING TELEMETRY…
+      </div>
+    );
+  }
+
   return (
     <div className="app">
-      <Header lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={handleRefresh}
+      <Header lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={fetchRainfallData}
         theme={theme} onThemeToggle={() => setTheme(theme === "dark" ? "light" : "dark")} />
+
+      {isMockData && (
+        <div style={{
+          background: "color-mix(in oklab, var(--warn) 12%, transparent)",
+          border: "1px solid var(--warn)",
+          color: "var(--warn)",
+          fontFamily: "var(--font-mono)",
+          fontSize: 12,
+          padding: "8px 14px",
+          marginBottom: "var(--gap)",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+        }}>
+          <span style={{ fontWeight: 600 }}>DEMO DATA</span>
+          · Live KiWIS telemetry unavailable — showing simulated rainfall data
+        </div>
+      )}
 
       {!openedStation && (
         <ControlsBar view={view} onView={handleView} range={range} onRange={setRange}
@@ -116,31 +164,23 @@ export default function App() {
       ) : view === "heatmap" ? (
         <HeatmapView stations={stations} accent={accentHex} range={range} />
       ) : (
-        <AlertsView stations={stations} accent={accentHex} showAI={showAI} />
+        <AlertsView stations={stations} accent={accentHex} />
       )}
 
-      {/* Accent & settings strip — simplified from Tweaks prototype panel */}
+      {/* Accent & density strip */}
       <div style={{ position: "fixed", bottom: 16, right: 16, display: "flex", gap: 8, alignItems: "center", zIndex: 50 }}>
         {ACCENT_PRESETS.map((p) => (
-          <button key={p.light} onClick={() => setAccent(p.light)}
-            title={p.name}
+          <button key={p.light} onClick={() => setAccent(p.light)} title={p.name}
             style={{
               width: 18, height: 18, borderRadius: "50%",
               background: theme === "dark" ? p.dark : p.light,
               border: accent === p.light ? "2px solid var(--text)" : "2px solid transparent",
-              cursor: "pointer",
-              flexShrink: 0,
+              cursor: "pointer", flexShrink: 0,
             }} />
         ))}
         <button className="icon-btn" style={{ fontSize: 11, width: "auto", padding: "0 10px", fontFamily: "var(--font-mono)" }}
-          onClick={() => setDensity(density === "comfy" ? "compact" : "comfy")}
-          title="Toggle density">
+          onClick={() => setDensity(density === "comfy" ? "compact" : "comfy")} title="Toggle density">
           {density === "comfy" ? "compact" : "comfy"}
-        </button>
-        <button className="icon-btn" style={{ fontSize: 11, width: "auto", padding: "0 10px", fontFamily: "var(--font-mono)" }}
-          onClick={() => setShowAI(!showAI)}
-          title="Toggle AI briefing">
-          AI {showAI ? "on" : "off"}
         </button>
       </div>
     </div>

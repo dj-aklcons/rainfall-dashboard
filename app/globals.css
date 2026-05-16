@@ -574,41 +574,6 @@ button {
   border-color: var(--text);
 }
 
-/* ====== AI summary ====== */
-.ai-summary {
-  background: linear-gradient(135deg, var(--accent-soft), transparent);
-  border: 1px solid var(--border);
-  padding: 16px;
-  border-radius: var(--radius);
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-.ai-summary .icon {
-  width: 28px; height: 28px;
-  border-radius: 0px;
-  display: grid; place-items: center;
-  background: var(--accent);
-  color: white;
-  flex-shrink: 0;
-}
-.ai-summary .icon svg { width: 14px; height: 14px; }
-.ai-summary .body { display: flex; flex-direction: column; gap: 4px; }
-.ai-summary .label {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-family: var(--font-mono);
-  color: var(--accent);
-  font-weight: 600;
-}
-.ai-summary .text {
-  font-size: 13.5px;
-  color: var(--text);
-  line-height: 1.55;
-  letter-spacing: -0.005em;
-}
-
 /* ====== Mobile tweaks ====== */
 @media (max-width: 720px) {
   .topbar { flex-wrap: wrap; }

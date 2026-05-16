@@ -1,0 +1,63 @@
+import { STATION_METAS, buildMockStations } from "@/lib/data";
+import type { Station, DataPoint } from "@/lib/types";
+
+const KIWIS_BASE = "http://aklc.hydrotel.co.nz:8080/KiWIS/KiWIS";
+
+interface KiWISRow {
+  ts_id: string;
+  data: [string, string, string][];
+}
+
+function buildKiWISUrl(tsId: string): string {
+  const params = new URLSearchParams({
+    service: "kisters",
+    type: "queryServices",
+    request: "getTimeseriesValues",
+    datasource: "0",
+    format: "dajson",
+    ts_id: `${tsId}~Rainfall.HOURTOT`,
+    period: "P30D",
+    returnfields: "Timestamp,Value,Quality Code",
+    timezone: "Etc/GMT-12",
+  });
+  return `${KIWIS_BASE}?${params.toString()}`;
+}
+
+function parseKiWISRow(row: KiWISRow, meta: typeof STATION_METAS[number]): Station {
+  const series: DataPoint[] = row.data.map(([timestamp, value, qualityCode]) => ({
+    timestamp,
+    value: value !== null && value !== "" ? Math.round(parseFloat(value) * 100) / 100 : 0,
+    quality: qualityCode === "1" ? 1 : 200,
+  }));
+
+  return {
+    id: meta.id,
+    name: meta.name,
+    site: meta.site,
+    ts_id: meta.ts_id,
+    lat: meta.lat,
+    lng: meta.lng,
+    elevation: meta.elevation,
+    series,
+  };
+}
+
+export async function GET() {
+  try {
+    const results = await Promise.all(
+      STATION_METAS.map(async (meta) => {
+        const url = buildKiWISUrl(meta.ts_id);
+        const res = await fetch(url, { next: { revalidate: 300 } }); // cache 5 min
+        if (!res.ok) throw new Error(`KiWIS ${meta.ts_id}: HTTP ${res.status}`);
+        const json = (await res.json()) as KiWISRow[];
+        if (!json.length || !json[0].data) throw new Error(`KiWIS ${meta.ts_id}: no data`);
+        return parseKiWISRow(json[0], meta);
+      })
+    );
+    return Response.json({ stations: results, isMockData: false });
+  } catch (err) {
+    console.error("KiWIS fetch failed, falling back to mock data:", err);
+    const stations = buildMockStations();
+    return Response.json({ stations, isMockData: true });
+  }
+}
