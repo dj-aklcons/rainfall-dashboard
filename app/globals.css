@@ -577,6 +577,7 @@ button {
 /* ====== Mobile tweaks ====== */
 @media (max-width: 639px) {
   .tab-label { display: none; }
+  .tab[aria-selected="true"] .tab-label { display: inline; }
   .tab { justify-content: center; }
 }
 @media (max-width: 720px) {

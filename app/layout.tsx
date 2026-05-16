@@ -17,8 +17,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="light" data-density="comfy" suppressHydrationWarning>
-      <body className={`${ubuntu.variable} ${GeistMono.variable}`}>{children}</body>
+    <html lang="en" data-theme="light" data-density="comfy" suppressHydrationWarning className={`${ubuntu.variable} ${GeistMono.variable}`}>
+      <body>{children}</body>
     </html>
   );
 }
