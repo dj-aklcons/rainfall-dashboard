@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auckland Rainfall API Builder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        pre {
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen p-4 md:p-8 font-sans">
+
+    <div class="max-w-4xl mx-auto">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-slate-800">Auckland Rainfall API Tool</h1>
+            <p class="text-slate-600 mt-2">Customize parameters to generate and test KiWIS API requests.</p>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <!-- CONFIGURATION PANEL -->
+            <div class="card p-6 space-y-6">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-2">Location (Site ID)</label>
+                    <select id="siteId" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                        <option value="648719">Albert Park (Central)</option>
+                        <option value="647722">Keeling Road (Waitakere)</option>
+                        <option value="648612">Wairau (Takapuna)</option>
+                        <option value="649940">Sports Bowl (Manukau)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-2">Time Period</label>
+                    <div class="flex space-x-2">
+                        <input type="number" id="periodValue" value="49" class="w-20 p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                        <select id="periodUnit" class="flex-1 p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                            <option value="H">Hours (H)</option>
+                            <option value="D">Days (D)</option>
+                            <option value="W">Weeks (W)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-2">Format</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button onclick="setFormat('dajson')" class="format-btn px-3 py-2 text-sm border rounded-lg bg-blue-50 border-blue-500 text-blue-700 font-medium" data-value="dajson">dajson</button>
+                        <button onclick="setFormat('json')" class="format-btn px-3 py-2 text-sm border rounded-lg bg-white border-slate-300 text-slate-600" data-value="json">json</button>
+                        <button onclick="setFormat('csv')" class="format-btn px-3 py-2 text-sm border rounded-lg bg-white border-slate-300 text-slate-600" data-value="csv">csv</button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-2">Timezone</label>
+                    <select id="timezone" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                        <option value="Etc/GMT-12">NZ Standard Time (GMT+12)</option>
+                        <option value="Etc/GMT-13">NZ Daylight Time (GMT+13)</option>
+                        <option value="UTC">UTC</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- OUTPUT PANEL -->
+            <div class="space-y-6">
+                <div class="card p-6 bg-slate-800 text-white">
+                    <h2 class="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4">Generated URL</h2>
+                    <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 mb-4">
+                        <code id="urlOutput" class="text-blue-300 break-all text-xs">Generating...</code>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button onclick="copyUrl()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded-lg transition">
+                            Copy URL
+                        </button>
+                        <button onclick="testUrl()" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 px-4 rounded-lg transition">
+                            Open in New Tab
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card p-6">
+                    <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-2">Parameter Summary</h2>
+                    <ul class="text-sm text-slate-600 space-y-1" id="paramSummary">
+                        <li><strong>Site:</strong> <span id="summarySite">Albert Park</span></li>
+                        <li><strong>Duration:</strong> <span id="summaryPeriod">P49H</span></li>
+                        <li><strong>Format:</strong> <span id="summaryFormat">dajson</span></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div id="copyToast" class="fixed bottom-8 left-1/2 -translate-x-1/2 bg-green-600 text-white px-6 py-2 rounded-full shadow-lg opacity-0 transition-opacity pointer-events-none">
+            URL Copied to Clipboard!
+        </div>
+    </div>
+
+    <script>
+        const config = {
+            baseUrl: "http://aklc.hydrotel.co.nz:8080/KiWIS/KiWIS",
+            format: "dajson"
+        };
+
+        const siteMap = {
+            "648719": "Albert Park (Central)",
+            "647722": "Keeling Road (Waitakere)",
+            "648612": "Wairau (Takapuna)",
+            "649940": "Sports Bowl (Manukau)"
+        };
+
+        function setFormat(f) {
+            config.format = f;
+            document.querySelectorAll('.format-btn').forEach(btn => {
+                if (btn.getAttribute('data-value') === f) {
+                    btn.className = "format-btn px-3 py-2 text-sm border rounded-lg bg-blue-50 border-blue-500 text-blue-700 font-medium";
+                } else {
+                    btn.className = "format-btn px-3 py-2 text-sm border rounded-lg bg-white border-slate-300 text-slate-600";
+                }
+            });
+            updateUrl();
+        }
+
+        function updateUrl() {
+            const siteId = document.getElementById('siteId').value;
+            const pVal = document.getElementById('periodValue').value;
+            const pUnit = document.getElementById('periodUnit').value;
+            const tz = document.getElementById('timezone').value;
+            
+            const period = `P${pVal}${pUnit}`;
+            const ts_id = `${siteId}~Rainfall.HOURTOT`;
+            
+            const params = new URLSearchParams({
+                service: "kisters",
+                type: "queryServices",
+                request: "getTimeseriesValues",
+                datasource: "0",
+                format: config.format,
+                ts_id: ts_id,
+                period: period,
+                returnfields: "Timestamp,Value,Quality Code",
+                timezone: tz
+            });
+
+            const finalUrl = `${config.baseUrl}?${params.toString()}`;
+            
+            // Update UI
+            document.getElementById('urlOutput').innerText = finalUrl;
+            document.getElementById('summarySite').innerText = siteMap[siteId];
+            document.getElementById('summaryPeriod').innerText = period;
+            document.getElementById('summaryFormat').innerText = config.format;
+        }
+
+        function copyUrl() {
+            const url = document.getElementById('urlOutput').innerText;
+            const el = document.createElement('textarea');
+            el.value = url;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+            
+            const toast = document.getElementById('copyToast');
+            toast.style.opacity = '1';
+            setTimeout(() => toast.style.opacity = '0', 2000);
+        }
+
+        function testUrl() {
+            const url = document.getElementById('urlOutput').innerText;
+            window.open(url, '_blank');
+        }
+
+        // Add event listeners
+        document.getElementById('siteId').addEventListener('change', updateUrl);
+        document.getElementById('periodValue').addEventListener('input', updateUrl);
+        document.getElementById('periodUnit').addEventListener('change', updateUrl);
+        document.getElementById('timezone').addEventListener('change', updateUrl);
+
+        // Initial build
+        window.onload = updateUrl;
+    </script>
+</body>
+</html>
