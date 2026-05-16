@@ -21,7 +21,7 @@ export default function Tabs({ value, onChange }: Props) {
         const I = Icons[icon] as (p: React.SVGProps<SVGSVGElement>) => React.ReactElement;
         return (
           <button key={id} className="tab" aria-selected={value === id} onClick={() => onChange(id)} role="tab">
-            <I /> {label}
+            <I /> <span className="tab-label">{label}</span>
           </button>
         );
       })}
