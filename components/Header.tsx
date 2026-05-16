@@ -16,7 +16,7 @@ export default function Header({ lastUpdated, refreshing, onRefresh, theme, onTh
     <header className="topbar">
       <div className="brand">
         <div className="brand-mark" aria-hidden="true">
-          <Icons.drop />
+          <Icons.dropColor />
         </div>
         <div className="brand-text">
           <strong>Auckland Rainfall</strong>
