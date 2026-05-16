@@ -10,13 +10,14 @@ import MapView from "@/components/MapView";
 import { buildStations } from "@/lib/data";
 import type { View, Range, Unit, Theme, Density, AccentPreset } from "@/lib/types";
 
+/* Te Penapena accent presets */
 const ACCENT_PRESETS: AccentPreset[] = [
-  { light: "#155f82", dark: "#0f9ed5", name: "Teal" },
-  { light: "#0f9ed5", dark: "#4cb8e0", name: "Sky" },
-  { light: "#196b24", dark: "#4ea72e", name: "Green" },
-  { light: "#4e2a41", dark: "#96607d", name: "Plum" },
-  { light: "#e97132", dark: "#f0a956", name: "Orange" },
-  { light: "#a02b93", dark: "#c45cb6", name: "Magenta" },
+  { light: "#124E4A", dark: "#52C0AA", name: "Deep Teal" },
+  { light: "#52C0AA", dark: "#7dd4c4", name: "Light Teal" },
+  { light: "#14A68B", dark: "#3ecbaa", name: "Success" },
+  { light: "#4576BB", dark: "#6a95d0", name: "Blue" },
+  { light: "#A03022", dark: "#d4574a", name: "Critical" },
+  { light: "#C95032", dark: "#e07050", name: "Warning" },
 ];
 
 function getLS<T>(key: string, fallback: T): T {
@@ -39,14 +40,14 @@ export default function App() {
   const [filter, setFilter] = useState(["central", "waitakere", "takapuna", "manukau"]);
 
   const [theme, setTheme] = useState<Theme>("light");
-  const [accent, setAccent] = useState("#155f82");
+  const [accent, setAccent] = useState("#124E4A");
   const [density, setDensity] = useState<Density>("comfy");
   const [showAI, setShowAI] = useState(true);
 
   // Load persisted preferences on mount
   useEffect(() => {
     setTheme(getLS<Theme>("theme", "light"));
-    setAccent(getLS<string>("accent", "#155f82"));
+    setAccent(getLS<string>("accent", "#124E4A"));
     setDensity(getLS<Density>("density", "comfy"));
     setShowAI(getLS<boolean>("showAI", true));
   }, []);

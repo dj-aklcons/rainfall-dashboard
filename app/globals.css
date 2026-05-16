@@ -1,67 +1,70 @@
 :root {
-  /* Palette tokens (verbatim from supplied theme) */
-  --c-dark1: #000000;
-  --c-light1: #ffffff;
-  --c-dark2: #4e2a41;       /* plum  */
-  --c-light2: #e8e8e8;
-  --c-accent1: #155f82;     /* deep teal — primary */
-  --c-accent2: #e97132;     /* orange */
-  --c-accent3: #196b24;     /* green  */
-  --c-accent4: #0f9ed5;     /* sky    */
-  --c-accent5: #a02b93;     /* magenta */
-  --c-accent6: #4ea72e;     /* lime   */
-  --c-link: #467886;
-  --c-link-v: #96607d;
+  /* Te Penapena — Auckland Council Conservation design tokens */
+  --brand-primary:   #124E4A;
+  --brand-secondary: #4576BB;
+  --brand-accent:    #52C0AA;
+  --brand-critical:  #A03022;
+  --brand-warning:   #C95032;
+  --brand-success:   #14A68B;
 
-  --bg: #fafaf9;
-  --surface: var(--c-light1);
-  --surface-2: #f3f1ef;
-  --border: var(--c-light2);
-  --border-strong: #d4d0cc;
-  --text: #1a1718;
-  --text-muted: #6b5e64;
-  --text-soft: #9a8e94;
-  --accent: var(--c-accent1);
-  --accent-soft: #155f821a;
-  --accent-strong: #0d4159;
-  --danger: var(--c-accent2);
-  --warn: #c2691f;
-  --ok: var(--c-accent3);
-  --radius: 14px;
-  --radius-sm: 8px;
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 0 rgba(15, 23, 42, 0.02);
-  --shadow-md: 0 6px 24px -12px rgba(15, 23, 42, 0.18), 0 2px 6px -2px rgba(15, 23, 42, 0.06);
-  --pad: 20px;
+  --bg:             #FFFFFF;
+  --surface:        #FFFFFF;
+  --surface-2:      #CCE7D3;   /* Pale Mint — triage/observational */
+  --surface-sidebar:#124E4A;   /* Deep Teal — navigation anchor */
+  --border:         #CCE7D3;
+  --border-strong:  #8D8D8B;   /* Council Gray */
+  --text:           #000000;
+  --text-muted:     #8D8D8B;
+  --text-soft:      #8D8D8B;
+  --accent:         #124E4A;
+  --accent-soft:    rgba(18, 78, 74, 0.12);
+  --accent-strong:  #0a2e2b;
+  --danger:         #A03022;   /* Deep Red — biohazard/critical */
+  --warn:           #C95032;   /* Soft Red — action required */
+  --ok:             #14A68B;   /* Deep Teal Success — stable */
+
+  /* Geometry — Te Penapena: rectilinear authority */
+  --radius:              0px;   /* Structural: sharp corners */
+  --radius-sm:           0px;   /* Structural: sharp corners */
+  --radius-interactive:  30px;  /* Buttons & inputs only */
+
+  --shadow-sm: 1px 2px 6px rgba(0, 0, 0, 0.14);   /* Council raised */
+  --shadow-md: 0px 3px 6px rgba(0, 0, 0, 0.16);    /* Hover/floating */
+
+  --pad: 24px;
   --gap: 16px;
-  --font: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --font: var(--font-ubuntu), Ubuntu, ui-sans-serif, system-ui, sans-serif;
+  --font-heading: Georgia, "Times New Roman", serif;
   --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   color-scheme: light;
 }
 
 [data-theme="dark"] {
-  --bg: #1a1014;
-  --surface: #241620;
-  --surface-2: #2c1c27;
-  --border: #3a2632;
-  --border-strong: #523544;
-  --text: #f4ebef;
-  --text-muted: #b4a0aa;
-  --text-soft: #806775;
-  --accent: var(--c-accent4);
-  --accent-soft: #0f9ed51f;
-  --accent-strong: #4cb8e0;
-  --danger: #f08b56;
-  --warn: #f0a956;
-  --ok: var(--c-accent6);
-  --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.02);
-  --shadow-md: 0 12px 32px -16px rgba(0, 0, 0, 0.6);
+  --bg:             #0d1f1e;
+  --surface:        #122b29;
+  --surface-2:      #1a3d39;
+  --surface-sidebar:#0a1f1d;
+  --border:         #1e4a45;
+  --border-strong:  #4d7a74;
+  --text:           #f0f7f6;
+  --text-muted:     #8ab5b0;
+  --text-soft:      #6b9993;
+  --accent:         #52C0AA;
+  --accent-soft:    rgba(82, 192, 170, 0.15);
+  --accent-strong:  #7dd4c4;
+  --danger:         #d4574a;
+  --warn:           #e07050;
+  --ok:             #3ecbaa;
+  --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-md: 0 12px 32px -16px rgba(0, 0, 0, 0.7);
   color-scheme: dark;
 }
 
 [data-density="compact"] {
   --pad: 14px;
   --gap: 12px;
-  --radius: 10px;
+  --radius: 0px;
 }
 
 * { box-sizing: border-box; }
@@ -99,9 +102,11 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding-bottom: 22px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 22px;
+  padding: 16px clamp(16px, 4vw, 40px);
+  background: var(--surface-sidebar);
+  border-bottom: none;
+  margin: -28px calc(-1 * clamp(16px, 4vw, 40px)) 28px;
+  color: #ffffff;
 }
 .brand {
   display: flex;
@@ -111,8 +116,8 @@ button {
 .brand-mark {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
-  background: var(--accent);
+  border-radius: 0px;
+  background: rgba(255, 255, 255, 0.15);
   color: white;
   display: grid;
   place-items: center;
@@ -123,12 +128,14 @@ button {
 .brand-text { display: flex; flex-direction: column; line-height: 1.1; }
 .brand-text strong {
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: -0.01em;
+  color: #ffffff;
+  font-family: var(--font-heading);
 }
 .brand-text span {
   font-size: 11px;
-  color: var(--text-muted);
+  color: rgba(255, 255, 255, 0.6);
   font-family: var(--font-mono);
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -141,11 +148,11 @@ button {
   align-items: center;
   gap: 8px;
   padding: 6px 10px 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-interactive);
   font-size: 12px;
-  color: var(--text-muted);
-  background: var(--surface);
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.1);
   font-family: var(--font-mono);
 }
 .status-dot {
@@ -163,13 +170,13 @@ button {
   height: 36px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-muted);
+  border-radius: var(--radius-interactive);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
   transition: 120ms ease;
 }
-.icon-btn:hover { color: var(--text); border-color: var(--border-strong); }
+.icon-btn:hover { color: #ffffff; background: rgba(255, 255, 255, 0.2); border-color: rgba(255, 255, 255, 0.35); }
 .icon-btn svg { width: 16px; height: 16px; }
 .icon-btn.spinning svg { animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -180,13 +187,13 @@ button {
   gap: 4px;
   background: var(--surface-2);
   padding: 4px;
-  border-radius: 10px;
+  border-radius: 0px;
   border: 1px solid var(--border);
 }
 .tab {
   padding: 7px 12px;
   font-size: 13px;
-  border-radius: 7px;
+  border-radius: 0px;
   color: var(--text-muted);
   font-weight: 500;
   display: inline-flex;
@@ -225,13 +232,13 @@ button {
   display: inline-flex;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: 0px;
   padding: 3px;
   gap: 2px;
 }
 .segmented button {
   padding: 6px 11px;
-  border-radius: 6px;
+  border-radius: 0px;
   color: var(--text-muted);
   font-size: 12.5px;
   font-weight: 500;
@@ -298,9 +305,10 @@ button {
 }
 .station-name {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: -0.01em;
   margin: 0 0 2px;
+  font-family: var(--font-heading);
 }
 .station-site {
   font-size: 11.5px;
@@ -373,7 +381,7 @@ button {
   background: var(--text);
   color: var(--surface);
   padding: 7px 9px;
-  border-radius: 7px;
+  border-radius: 0px;
   font-size: 11.5px;
   font-family: var(--font-mono);
   white-space: nowrap;
@@ -405,7 +413,7 @@ button {
   font-size: 12.5px;
   color: var(--text-muted);
   padding: 6px 10px 6px 6px;
-  border-radius: 8px;
+  border-radius: var(--radius-interactive);
   margin-bottom: 12px;
 }
 .back-btn:hover { color: var(--text); background: var(--surface); }
@@ -476,7 +484,7 @@ button {
 }
 .hm-cell {
   aspect-ratio: 1.4 / 1;
-  border-radius: 3px;
+  border-radius: 2px;
   background: var(--surface-2);
   position: relative;
   transition: transform 80ms ease;
@@ -494,7 +502,7 @@ button {
   color: var(--text-muted);
 }
 .hm-legend .gradient {
-  width: 140px; height: 10px; border-radius: 3px;
+  width: 140px; height: 10px; border-radius: 0px;
   background: linear-gradient(to right,
     var(--surface-2),
     color-mix(in oklab, var(--accent) 30%, var(--surface-2)),
@@ -521,7 +529,7 @@ button {
 .alert-card.sev-low { border-left-color: var(--ok); }
 .alert-icon {
   width: 32px; height: 32px;
-  border-radius: 8px;
+  border-radius: 0px;
   display: grid; place-items: center;
   flex-shrink: 0;
   background: var(--surface-2);
@@ -544,7 +552,7 @@ button {
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
-  border-radius: 6px;
+  border-radius: var(--radius-interactive);
   font-family: var(--font-mono);
   font-size: 12.5px;
   font-variant-numeric: tabular-nums;
@@ -578,7 +586,7 @@ button {
 }
 .ai-summary .icon {
   width: 28px; height: 28px;
-  border-radius: 8px;
+  border-radius: 0px;
   display: grid; place-items: center;
   background: var(--accent);
   color: white;

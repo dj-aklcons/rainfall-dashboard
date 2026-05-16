@@ -1,7 +1,14 @@
 import type { Metadata } from "next";
-import { GeistSans } from "geist/font/sans";
+import { Ubuntu } from "next/font/google";
 import { GeistMono } from "geist/font/mono";
 import "./globals.css";
+
+const ubuntu = Ubuntu({
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
+  variable: "--font-ubuntu",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Auckland Rainfall Dashboard",
@@ -11,7 +18,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" data-theme="light" data-density="comfy" suppressHydrationWarning>
-      <body className={`${GeistSans.variable} ${GeistMono.variable}`}>{children}</body>
+      <body className={`${ubuntu.variable} ${GeistMono.variable}`}>{children}</body>
     </html>
   );
 }
