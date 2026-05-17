@@ -463,7 +463,6 @@ button {
 .heatmap-wrap { overflow-x: auto; }
 .heatmap {
   display: grid;
-  grid-template-columns: 110px repeat(24, 1fr);
   gap: 2px;
   min-width: 720px;
 }
