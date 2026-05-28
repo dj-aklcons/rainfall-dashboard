@@ -2,6 +2,7 @@ import { STATION_METAS, buildMockStations } from "@/lib/data";
 import type { Station, DataPoint } from "@/lib/types";
 
 const KIWIS_BASE = "http://aklc.hydrotel.co.nz:8080/KiWIS/KiWIS";
+const TIMEOUT_MS = 8_000;
 
 interface KiWISRow {
   ts_id: string;
@@ -29,35 +30,43 @@ function parseKiWISRow(row: KiWISRow, meta: typeof STATION_METAS[number]): Stati
     value: value !== null && value !== "" ? Math.round(parseFloat(value) * 100) / 100 : 0,
     quality: qualityCode === "1" ? 1 : 200,
   }));
-
   return {
-    id: meta.id,
-    name: meta.name,
-    site: meta.site,
-    ts_id: meta.ts_id,
-    lat: meta.lat,
-    lng: meta.lng,
-    elevation: meta.elevation,
-    series,
+    id: meta.id, name: meta.name, site: meta.site, ts_id: meta.ts_id,
+    lat: meta.lat, lng: meta.lng, elevation: meta.elevation, series,
   };
+}
+
+// Fetches one station with a hard timeout. Retries once on any failure
+// so a slow KiWIS cold-start doesn't immediately fall back to mock data.
+async function fetchStation(
+  meta: typeof STATION_METAS[number],
+  attempt = 0
+): Promise<Station> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(buildKiWISUrl(meta.ts_id), {
+      signal: controller.signal,
+      next: { revalidate: 300 },
+    });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = (await res.json()) as KiWISRow[];
+    if (!json.length || !json[0].data) throw new Error("empty response");
+    return parseKiWISRow(json[0], meta);
+  } catch (err) {
+    clearTimeout(timer);
+    if (attempt < 1) return fetchStation(meta, attempt + 1);
+    throw err;
+  }
 }
 
 export async function GET() {
   try {
-    const results = await Promise.all(
-      STATION_METAS.map(async (meta) => {
-        const url = buildKiWISUrl(meta.ts_id);
-        const res = await fetch(url, { next: { revalidate: 300 } }); // cache 5 min
-        if (!res.ok) throw new Error(`KiWIS ${meta.ts_id}: HTTP ${res.status}`);
-        const json = (await res.json()) as KiWISRow[];
-        if (!json.length || !json[0].data) throw new Error(`KiWIS ${meta.ts_id}: no data`);
-        return parseKiWISRow(json[0], meta);
-      })
-    );
-    return Response.json({ stations: results, isMockData: false });
+    const stations = await Promise.all(STATION_METAS.map((m) => fetchStation(m)));
+    return Response.json({ stations, isMockData: false });
   } catch (err) {
     console.error("KiWIS fetch failed, falling back to mock data:", err);
-    const stations = buildMockStations();
-    return Response.json({ stations, isMockData: true });
+    return Response.json({ stations: buildMockStations(), isMockData: true });
   }
 }
