@@ -89,7 +89,7 @@ export default function DrillView({ station, range, unit, accent, onBack, onRang
                 </div>
               </div>
             </div>
-            <LineChart series={series} accent={accent} mode={unit === "total" ? "cumulative" : "hourly"} height={300} />
+            <LineChart series={series} accent={accent} mode={unit === "total" ? "cumulative" : "hourly"} height={300} range={range} />
           </div>
         </div>
 
