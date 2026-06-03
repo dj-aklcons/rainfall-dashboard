@@ -156,7 +156,7 @@ export default function App() {
 
       {openedStation ? (
         <DrillView station={openedStation} range={range} unit={unit} accent={accentHex}
-          onBack={() => setOpenedId(null)} />
+          onBack={() => setOpenedId(null)} onRange={setRange} />
       ) : view === "dashboard" ? (
         <DashboardView stations={stations} range={range} unit={unit} accent={accentHex}
           filter={filter} onOpen={setOpenedId} />

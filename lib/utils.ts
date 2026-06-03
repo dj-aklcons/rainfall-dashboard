@@ -24,7 +24,7 @@ export function fmtRel(d: Date | null): string {
 }
 
 export function hoursForRange(range: string): number {
-  return ({ "24h": 24, "7d": 168, "30d": 720 } as Record<string, number>)[range] ?? 24;
+  return ({ "24h": 24, "48h": 48, "7d": 168, "30d": 720 } as Record<string, number>)[range] ?? 24;
 }
 
 export function calcStats(series: DataPoint[]) {
@@ -36,7 +36,7 @@ export function calcStats(series: DataPoint[]) {
 }
 
 export function severityFor(total: number, range: string): "high" | "med" | "low" | null {
-  const norm = range === "24h" ? total : range === "7d" ? total / 3 : total / 8;
+  const norm = range === "24h" ? total : range === "48h" ? total / 2 : range === "7d" ? total / 3 : total / 8;
   if (norm >= 50) return "high";
   if (norm >= 25) return "med";
   if (norm >= 10) return "low";

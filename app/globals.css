@@ -390,8 +390,7 @@ button {
   z-index: 5;
   line-height: 1.45;
 }
-.chart-tooltip b { color: var(--accent-strong); font-weight: 600; }
-[data-theme="dark"] .chart-tooltip b { color: var(--accent); }
+.chart-tooltip b { color: var(--brand-accent); font-weight: 600; }
 .chart-tooltip-time { opacity: .6; font-size: 10.5px; }
 
 /* ====== Drill-in ====== */

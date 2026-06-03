@@ -19,7 +19,7 @@ export interface Station extends StationMeta {
 }
 
 export type View = "dashboard" | "map" | "heatmap" | "alerts";
-export type Range = "24h" | "7d" | "30d";
+export type Range = "24h" | "48h" | "7d" | "30d";
 export type Unit = "rate" | "total";
 export type Theme = "light" | "dark";
 export type Density = "comfy" | "compact";

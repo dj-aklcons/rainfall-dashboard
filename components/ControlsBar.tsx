@@ -37,7 +37,7 @@ export default function ControlsBar({ view, onView, range, onRange, unit, onUnit
           )}
           <span className="control-label">Range</span>
           <div className="segmented">
-            {(["24h", "7d", "30d"] as Range[]).map((r) => (
+            {(["24h", "48h", "7d", "30d"] as Range[]).map((r) => (
               <button key={r} aria-pressed={range === r} onClick={() => onRange(r)}>{r}</button>
             ))}
           </div>

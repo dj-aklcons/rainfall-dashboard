@@ -10,9 +10,14 @@ interface Props {
 
 function axisLabels(range: Range): string[] {
   if (range === "24h") {
-    // 24 columns — show hour label every 6 hours
     return Array.from({ length: 24 }, (_, h) =>
       h % 6 === 0 ? h.toString().padStart(2, "0") : ""
+    );
+  }
+  if (range === "48h") {
+    // 48 columns — label every 12 hours
+    return Array.from({ length: 48 }, (_, h) =>
+      h % 12 === 0 ? `${h}h` : ""
     );
   }
   if (range === "7d") {
@@ -32,6 +37,7 @@ function axisLabels(range: Range): string[] {
 
 const CONFIG: Record<Range, { cols: number; days: number; subtitle: string }> = {
   "24h": { cols: 24, days: 1,  subtitle: "Hourly intensity — last 24 hours" },
+  "48h": { cols: 48, days: 2,  subtitle: "Hourly intensity — last 48 hours" },
   "7d":  { cols: 28, days: 7,  subtitle: "6-hour totals — last 7 days" },
   "30d": { cols: 30, days: 30, subtitle: "Daily totals — last 30 days" },
 };
