@@ -1,6 +1,9 @@
 import { STATION_METAS, buildMockStations } from "@/lib/data";
 import type { Station, DataPoint } from "@/lib/types";
 
+// Always fetch live data — never serve a cached route response.
+export const dynamic = "force-dynamic";
+
 const KIWIS_BASE = "http://aklc.hydrotel.co.nz:8080/KiWIS/KiWIS";
 const TIMEOUT_MS = 8_000;
 
@@ -47,7 +50,7 @@ async function fetchStation(
   try {
     const res = await fetch(buildKiWISUrl(meta.ts_id), {
       signal: controller.signal,
-      next: { revalidate: 300 },
+      cache: "no-store",
     });
     clearTimeout(timer);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
