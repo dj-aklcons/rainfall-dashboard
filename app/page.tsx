@@ -40,6 +40,7 @@ export default function App() {
   const [stations, setStations] = useState<Station[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [isMockData, setIsMockData] = useState(false);
+  const [apiErrors, setApiErrors] = useState<string[]>([]);
 
   const [theme, setTheme] = useState<Theme>("light");
   const [accent, setAccent] = useState("#124E4A");
@@ -76,9 +77,10 @@ export default function App() {
     try {
       const res = await fetch("/api/rainfall");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as { stations: Station[]; isMockData: boolean };
+      const json = (await res.json()) as { stations: Station[]; isMockData: boolean; errors?: string[] };
       setStations(json.stations);
       setIsMockData(json.isMockData);
+      setApiErrors(json.errors ?? []);
       setLastUpdated(new Date());
     } catch {
       // API unreachable or Vercel function timed out — load mock data client-side
@@ -151,6 +153,11 @@ export default function App() {
         }}>
           <span style={{ fontWeight: 600 }}>DEMO DATA</span>
           · Live KiWIS telemetry unavailable — showing simulated rainfall data
+          {apiErrors.length > 0 && (
+            <span style={{ opacity: 0.7, marginLeft: 8 }}>
+              ({apiErrors.join(" | ")})
+            </span>
+          )}
         </div>
       )}
 

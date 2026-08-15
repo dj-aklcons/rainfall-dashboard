@@ -1,19 +1,20 @@
+import http from "http";
 import { STATION_METAS, buildMockStations } from "@/lib/data";
 import type { Station, DataPoint } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-const KIWIS_BASE = "http://aklc.hydrotel.co.nz:8080/KiWIS/KiWIS";
-const TIMEOUT_MS = 4_000;
+const KIWIS_HOST = "aklc.hydrotel.co.nz";
+const KIWIS_PORT = 8080;
+const KIWIS_PATH = "/KiWIS/KiWIS";
+const TIMEOUT_MS = 6_000;
 
 interface KiWISRow {
   ts_id: string;
   data: [string, string, string][];
 }
 
-function buildKiWISUrl(tsId: string): string {
-  // Build base params without ts_id so URLSearchParams doesn't encode the ~ character.
-  // KiWIS expects the literal ~ in "648719~Rainfall.HOURTOT" — %7E may be rejected.
+function buildPath(tsId: string): string {
   const params = new URLSearchParams({
     service: "kisters",
     type: "queryServices",
@@ -24,7 +25,31 @@ function buildKiWISUrl(tsId: string): string {
     returnfields: "Timestamp,Value,Quality Code",
     timezone: "Etc/GMT-12",
   });
-  return `${KIWIS_BASE}?${params.toString()}&ts_id=${tsId}~Rainfall.HOURTOT`;
+  // Append ts_id outside URLSearchParams so ~ is not percent-encoded
+  return `${KIWIS_PATH}?${params.toString()}&ts_id=${tsId}~Rainfall.HOURTOT`;
+}
+
+/** Raw Node.js HTTP — bypasses Next.js fetch wrapper and any intermediate caching. */
+function httpGet(path: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      { hostname: KIWIS_HOST, port: KIWIS_PORT, path, method: "GET",
+        timeout: TIMEOUT_MS, headers: { Accept: "application/json" } },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (c: Buffer) => chunks.push(c));
+        res.on("end", () => {
+          const body = Buffer.concat(chunks).toString("utf8");
+          if (res.statusCode !== 200) reject(new Error(`HTTP ${res.statusCode}`));
+          else resolve(body);
+        });
+        res.on("error", reject);
+      }
+    );
+    req.on("timeout", () => req.destroy(new Error("timeout")));
+    req.on("error", reject);
+    req.end();
+  });
 }
 
 function parseKiWISRow(row: KiWISRow, meta: typeof STATION_METAS[number]): Station {
@@ -43,41 +68,37 @@ async function fetchStation(
   meta: typeof STATION_METAS[number],
   attempt = 0
 ): Promise<Station> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(buildKiWISUrl(meta.ts_id), {
-      signal: controller.signal,
-      cache: "no-store",
-    });
-    clearTimeout(timer);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = (await res.json()) as KiWISRow[];
+    const body = await httpGet(buildPath(meta.ts_id));
+    const json = JSON.parse(body) as KiWISRow[];
     if (!json.length || !json[0].data) throw new Error("empty response");
     return parseKiWISRow(json[0], meta);
   } catch (err) {
-    clearTimeout(timer);
-    if (attempt < 1) return fetchStation(meta, attempt + 1);
+    if (attempt < 1) {
+      await new Promise((r) => setTimeout(r, 500));
+      return fetchStation(meta, attempt + 1);
+    }
     throw err;
   }
 }
 
 export async function GET() {
   const mockStations = buildMockStations();
-
-  // allSettled: a single failing station no longer kills all four.
   const results = await Promise.allSettled(STATION_METAS.map((m) => fetchStation(m)));
 
   let anyLive = false;
+  const errors: string[] = [];
+
   const stations: Station[] = results.map((result, i) => {
     if (result.status === "fulfilled") {
       anyLive = true;
       return result.value;
     }
     const msg = result.reason instanceof Error ? result.reason.message : String(result.reason);
+    errors.push(`${STATION_METAS[i].id}: ${msg}`);
     console.error(`[rainfall] ${STATION_METAS[i].id} failed: ${msg}`);
     return mockStations.find((s) => s.id === STATION_METAS[i].id) ?? mockStations[i];
   });
 
-  return Response.json({ stations, isMockData: !anyLive });
+  return Response.json({ stations, isMockData: !anyLive, errors });
 }
