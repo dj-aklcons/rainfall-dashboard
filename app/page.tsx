@@ -75,12 +75,18 @@ export default function App() {
     setRefreshing(true);
     try {
       const res = await fetch("/api/rainfall");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = (await res.json()) as { stations: Station[]; isMockData: boolean };
       setStations(json.stations);
       setIsMockData(json.isMockData);
       setLastUpdated(new Date());
     } catch {
+      // API unreachable or Vercel function timed out — load mock data client-side
+      // so the dashboard always has something to display.
+      const { buildMockStations } = await import("@/lib/data");
+      setStations(buildMockStations());
       setIsMockData(true);
+      setLastUpdated(new Date());
     } finally {
       setRefreshing(false);
       setDataLoading(false);

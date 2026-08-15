@@ -5,7 +5,7 @@ import type { Station, DataPoint } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 const KIWIS_BASE = "http://aklc.hydrotel.co.nz:8080/KiWIS/KiWIS";
-const TIMEOUT_MS = 8_000;
+const TIMEOUT_MS = 4_000; // 4s × 2 attempts = 8s, safely under Vercel's 10s function limit
 
 interface KiWISRow {
   ts_id: string;
