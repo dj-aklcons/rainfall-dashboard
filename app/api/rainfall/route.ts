@@ -13,7 +13,8 @@ const LIVE_PERIOD = "P48H";
 // GitHub raw URL of the file kept fresh by .github/workflows/fetch-rainfall.yml
 const GITHUB_CACHE_URL =
   "https://raw.githubusercontent.com/dj-aklcons/rainfall-dashboard/main/data/cached-rainfall.json";
-const CACHE_MAX_AGE_MS = 60 * 60 * 1_000; // treat cache as stale after 60 min
+// No max-age: serve any cached data regardless of age. Stale real telemetry >>
+// mock data. The cron keeps it fresh whenever KiWIS is reachable from Actions.
 
 interface KiWISRow {
   ts_id: string;
@@ -67,17 +68,16 @@ async function fetchStationLive(meta: typeof STATION_METAS[number]): Promise<Sta
   }
 }
 
-/** Returns full P30D stations from GitHub cache, or null if stale/missing. */
-async function tryGitHubCache(): Promise<Station[] | null> {
+/** Returns cached stations from GitHub, or null if missing/empty. Serves any age — stale beats mock. */
+async function tryGitHubCache(): Promise<{ stations: Station[]; fetchedAt: string } | null> {
   try {
     const res = await fetch(GITHUB_CACHE_URL, { cache: "no-store" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = (await res.json()) as CachedData;
     if (!data.stations?.length) throw new Error("empty");
-    const ageMs = Date.now() - new Date(data.fetchedAt).getTime();
-    if (ageMs > CACHE_MAX_AGE_MS) throw new Error(`stale (${Math.round(ageMs / 60_000)}m old)`);
-    console.log(`[rainfall] serving GitHub cache from ${data.fetchedAt}`);
-    return data.stations;
+    const ageMin = Math.round((Date.now() - new Date(data.fetchedAt).getTime()) / 60_000);
+    console.log(`[rainfall] serving GitHub cache from ${data.fetchedAt} (${ageMin}m ago)`);
+    return { stations: data.stations, fetchedAt: data.fetchedAt };
   } catch (err) {
     console.log(`[rainfall] GitHub cache unavailable: ${err}`);
     return null;
@@ -88,10 +88,14 @@ export async function GET() {
   const mockStations = buildMockStations();
   const errors: string[] = [];
 
-  // 1. Try GitHub Actions cache first — full P30D history, always fresh when cron runs
+  // 1. Try GitHub Actions cache first — full P30D history. No staleness cutoff:
+  //    real data from an hour (or a day) ago beats synthetic mock data.
   const cached = await tryGitHubCache();
   if (cached) {
-    return Response.json({ stations: cached, isMockData: false, source: "cache" });
+    return Response.json({
+      stations: cached.stations, isMockData: false,
+      source: "cache", cacheAge: cached.fetchedAt,
+    });
   }
 
   // 2. Fall back to direct KiWIS fetch (P48H — small payload, completes in ~2s like disaster app)
