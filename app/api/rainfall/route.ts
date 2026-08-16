@@ -122,28 +122,45 @@ async function tryGitHubCache(): Promise<{ stations: Station[]; fetchedAt: strin
   }
 }
 
+// Cache successful live responses at Vercel's edge for 5 minutes.
+// The first visitor after expiry pays the ~25s sequential fetch cost;
+// everyone else within that window gets an instant cached response.
+// Mock-data responses are never cached (no Cache-Control header).
+const LIVE_CACHE_HEADERS = {
+  "Content-Type": "application/json",
+  "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+};
+
+function jsonResponse(body: unknown, cache = false) {
+  const str = JSON.stringify(body);
+  return cache
+    ? new Response(str, { headers: LIVE_CACHE_HEADERS })
+    : Response.json(body);
+}
+
 export async function GET() {
   // 1. Try GitHub cache — full P30D history for charts.
   //    Requires GITHUB_TOKEN env var (private repo) or make the repo public.
   const cached = await tryGitHubCache();
   if (cached) {
-    return Response.json({
+    return jsonResponse({
       stations: cached.stations,
       isMockData: false,
       source: "cache",
       cacheAge: cached.fetchedAt,
-    });
+    }, true);
   }
 
   // 2. Sequential live KiWIS fetch — P24H, one station at a time.
   //    KiWIS rejects concurrent requests with HTTP 500; sequential avoids this.
+  //    First caller in each 5-min window pays the ~25s cost; Vercel edge caches it for the rest.
   const { stations, errors, anyLive } = await fetchStationsSequential();
 
   if (anyLive) {
-    return Response.json({ stations, isMockData: false, source: "live-24h", errors });
+    return jsonResponse({ stations, isMockData: false, source: "live-24h", errors }, true);
   }
 
-  // 3. Last resort — mock data
+  // 3. Last resort — mock data (not cached — we want to retry KiWIS on next load)
   const mockStations = buildMockStations();
-  return Response.json({ stations: mockStations, isMockData: true, source: "mock", errors });
+  return jsonResponse({ stations: mockStations, isMockData: true, source: "mock", errors }, false);
 }
