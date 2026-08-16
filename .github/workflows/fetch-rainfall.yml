@@ -1,0 +1,36 @@
+name: Fetch Rainfall Data
+
+on:
+  schedule:
+    # Every 30 minutes. GitHub Actions uses Azure infrastructure which
+    # may reach aklc.hydrotel.co.nz:8080 when Vercel (AWS) cannot.
+    - cron: "0,30 * * * *"
+  workflow_dispatch: # Allow manual trigger from the GitHub Actions tab
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Fetch rainfall data from KiWIS
+        run: node scripts/fetch-rainfall.mjs
+
+      - name: Commit cached data if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/cached-rainfall.json
+          if git diff --staged --quiet; then
+            echo "No changes — skipping commit"
+          else
+            git commit -m "chore: update cached rainfall data [skip vercel]"
+            git push
+          fi
