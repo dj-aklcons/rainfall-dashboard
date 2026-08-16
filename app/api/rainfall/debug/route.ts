@@ -1,9 +1,6 @@
-import http from "http";
 export const dynamic = "force-dynamic";
 
-const KIWIS_HOST = "aklc.hydrotel.co.nz";
-const KIWIS_PORT = 8080;
-const KIWIS_PATH = "/KiWIS/KiWIS";
+const KIWIS_BASE = "http://aklc.hydrotel.co.nz:8080/KiWIS/KiWIS";
 const TIMEOUT_MS = 8_000;
 
 const STATIONS = [
@@ -13,7 +10,7 @@ const STATIONS = [
   { id: "manukau",   ts_id: "649940" },
 ];
 
-function buildPath(tsId: string) {
+function buildUrl(tsId: string) {
   const params = new URLSearchParams({
     service: "kisters", type: "queryServices",
     request: "getTimeseriesValues", datasource: "0",
@@ -21,58 +18,35 @@ function buildPath(tsId: string) {
     returnfields: "Timestamp,Value,Quality Code",
     timezone: "Etc/GMT-12",
   });
-  return `${KIWIS_PATH}?${params.toString()}&ts_id=${tsId}~Rainfall.HOURTOT`;
-}
-
-function httpGet(path: string): Promise<{ body: string; status: number; elapsed: number }> {
-  const t0 = Date.now();
-  return new Promise((resolve, reject) => {
-    const req = http.request(
-      { hostname: KIWIS_HOST, port: KIWIS_PORT, path, method: "GET",
-        timeout: TIMEOUT_MS, headers: { Accept: "application/json" } },
-      (res) => {
-        const chunks: Buffer[] = [];
-        res.on("data", (c: Buffer) => chunks.push(c));
-        res.on("end", () => resolve({
-          body: Buffer.concat(chunks).toString("utf8"),
-          status: res.statusCode ?? 0,
-          elapsed: Date.now() - t0,
-        }));
-        res.on("error", reject);
-      }
-    );
-    req.on("timeout", () => req.destroy(new Error("timeout")));
-    req.on("error", (e) => reject(Object.assign(e, { elapsed: Date.now() - t0 })));
-    req.end();
-  });
+  return `${KIWIS_BASE}?${params.toString()}&ts_id=${tsId}~Rainfall.HOURTOT`;
 }
 
 export async function GET() {
   const results = await Promise.allSettled(
     STATIONS.map(async (s) => {
-      const path = buildPath(s.ts_id);
-      const url = `http://${KIWIS_HOST}:${KIWIS_PORT}${path}`;
+      const url = buildUrl(s.ts_id);
+      const t0 = Date.now();
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
       try {
-        const { body, status, elapsed } = await httpGet(path);
+        const res = await fetch(url, { signal: controller.signal, cache: "no-store" });
+        clearTimeout(timer);
+        const elapsed = Date.now() - t0;
+        const text = await res.text();
         let dataPoints = 0;
-        try {
-          const json = JSON.parse(body);
-          dataPoints = Array.isArray(json) ? (json[0]?.data?.length ?? 0) : 0;
-        } catch { /* unparseable */ }
-        return { id: s.id, ts_id: s.ts_id, url, status, elapsed, dataPoints,
-          ok: status === 200 && dataPoints > 0, preview: body.slice(0, 200) };
+        try { dataPoints = JSON.parse(text)?.[0]?.data?.length ?? 0; } catch { /* skip */ }
+        return { id: s.id, ts_id: s.ts_id, status: res.status, elapsed, dataPoints,
+          ok: res.ok && dataPoints > 0, preview: text.slice(0, 200) };
       } catch (err) {
-        const e = err as Error & { elapsed?: number };
-        return { id: s.id, ts_id: s.ts_id, url, status: null,
-          elapsed: e.elapsed ?? TIMEOUT_MS, dataPoints: 0, ok: false,
-          error: e.message };
+        clearTimeout(timer);
+        return { id: s.id, ts_id: s.ts_id, status: null, elapsed: Date.now() - t0,
+          dataPoints: 0, ok: false, error: err instanceof Error ? err.message : String(err) };
       }
     })
   );
 
-  const stations = results.map((r) =>
-    r.status === "fulfilled" ? r.value : { error: String(r.reason) }
-  );
-
-  return Response.json({ timestamp: new Date().toISOString(), stations });
+  return Response.json({
+    timestamp: new Date().toISOString(),
+    stations: results.map((r) => r.status === "fulfilled" ? r.value : { error: String(r.reason) }),
+  });
 }
