@@ -2,15 +2,18 @@ import { STATION_METAS, buildMockStations } from "@/lib/data";
 import type { Station, DataPoint } from "@/lib/types";
 
 // Edge Runtime runs on Cloudflare's network (not AWS Lambda).
-// Cloudflare has different IP ranges — may reach KiWIS where AWS/Azure cannot.
+// KiWIS (aklc.hydrotel.co.nz:8080) is reachable from Cloudflare but limits to
+// ONE concurrent request per IP — fetch stations sequentially, not in parallel.
 export const runtime = "edge";
 
 const KIWIS_BASE = "http://aklc.hydrotel.co.nz:8080/KiWIS/KiWIS";
-const TIMEOUT_MS = 8_000;
-const LIVE_PERIOD = "P48H";
+// 6 s per station × 4 stations = 24 s max, well within Edge's 30 s limit.
+const TIMEOUT_MS = 6_000;
+// P24H: the user wants fresh last-24-hours data; 24 pts is a small payload.
+// The GitHub Actions cron fetches full P30D for historical charts.
+const LIVE_PERIOD = "P24H";
 
-// GitHub raw URL of the file kept fresh by .github/workflows/fetch-rainfall.yml.
-// Cache-busting param (?t=...) forces GitHub's CDN to return the latest commit.
+// GitHub raw URL — works for public repos or when GITHUB_TOKEN env var is set.
 const GITHUB_CACHE_BASE =
   "https://raw.githubusercontent.com/dj-aklcons/rainfall-dashboard/main/data/cached-rainfall.json";
 
@@ -66,12 +69,47 @@ async function fetchStationLive(meta: typeof STATION_METAS[number]): Promise<Sta
   }
 }
 
-/** Returns cached stations from GitHub, or null if missing/empty. Serves any age — stale beats mock. */
+/**
+ * Fetch stations one at a time — KiWIS rejects concurrent requests from the same
+ * IP with HTTP 500. Sequential keeps us under its concurrency limit.
+ * Returns partial results: fulfilled stations plus mock fallbacks for failures.
+ */
+async function fetchStationsSequential(): Promise<{ stations: Station[]; errors: string[]; anyLive: boolean }> {
+  const mockStations = buildMockStations();
+  const stations: Station[] = [];
+  const errors: string[] = [];
+  let anyLive = false;
+
+  for (const meta of STATION_METAS) {
+    try {
+      const station = await fetchStationLive(meta);
+      stations.push(station);
+      anyLive = true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(`${meta.id}: ${msg}`);
+      console.error(`[rainfall] ${meta.id} failed: ${msg}`);
+      stations.push(mockStations.find((s) => s.id === meta.id) ?? mockStations[0]);
+    }
+  }
+
+  return { stations, errors, anyLive };
+}
+
+/**
+ * Returns cached stations from GitHub, or null if missing/empty.
+ * Supports private repos when GITHUB_TOKEN env var is set (Vercel env).
+ * Serves any age — stale real telemetry beats synthetic mock data.
+ */
 async function tryGitHubCache(): Promise<{ stations: Station[]; fetchedAt: string } | null> {
-  // Append timestamp to bust GitHub's CDN cache and always get the latest commit.
   const url = `${GITHUB_CACHE_BASE}?t=${Date.now()}`;
+  const headers: Record<string, string> = {};
+  // Set GITHUB_TOKEN in Vercel env vars (Settings → Environment Variables) to
+  // access this private repo. A fine-grained token with contents:read is enough.
+  if (process.env.GITHUB_TOKEN) headers["Authorization"] = `Bearer ${process.env.GITHUB_TOKEN}`;
+
   try {
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await fetch(url, { cache: "no-store", headers });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = (await res.json()) as CachedData;
     if (!data.stations?.length) throw new Error("empty");
@@ -85,38 +123,27 @@ async function tryGitHubCache(): Promise<{ stations: Station[]; fetchedAt: strin
 }
 
 export async function GET() {
-  const mockStations = buildMockStations();
-  const errors: string[] = [];
-
-  // 1. Try GitHub Actions cache first — full P30D history. No staleness cutoff:
-  //    real data from an hour (or a day) ago beats synthetic mock data.
+  // 1. Try GitHub cache — full P30D history for charts.
+  //    Requires GITHUB_TOKEN env var (private repo) or make the repo public.
   const cached = await tryGitHubCache();
   if (cached) {
     return Response.json({
-      stations: cached.stations, isMockData: false,
-      source: "cache", cacheAge: cached.fetchedAt,
+      stations: cached.stations,
+      isMockData: false,
+      source: "cache",
+      cacheAge: cached.fetchedAt,
     });
   }
 
-  // 2. Fall back to direct KiWIS fetch (P48H — small payload, completes in ~2s like disaster app)
-  const results = await Promise.allSettled(STATION_METAS.map((m) => fetchStationLive(m)));
-
-  let anyLive = false;
-  const stations: Station[] = results.map((result, i) => {
-    if (result.status === "fulfilled") {
-      anyLive = true;
-      return result.value;
-    }
-    const msg = result.reason instanceof Error ? result.reason.message : String(result.reason);
-    errors.push(`${STATION_METAS[i].id}: ${msg}`);
-    console.error(`[rainfall] ${STATION_METAS[i].id} failed: ${msg}`);
-    return mockStations.find((s) => s.id === STATION_METAS[i].id) ?? mockStations[i];
-  });
+  // 2. Sequential live KiWIS fetch — P24H, one station at a time.
+  //    KiWIS rejects concurrent requests with HTTP 500; sequential avoids this.
+  const { stations, errors, anyLive } = await fetchStationsSequential();
 
   if (anyLive) {
-    return Response.json({ stations, isMockData: false, source: "live-48h", errors });
+    return Response.json({ stations, isMockData: false, source: "live-24h", errors });
   }
 
   // 3. Last resort — mock data
+  const mockStations = buildMockStations();
   return Response.json({ stations: mockStations, isMockData: true, source: "mock", errors });
 }
