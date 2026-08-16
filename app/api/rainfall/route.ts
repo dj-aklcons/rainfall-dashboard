@@ -9,11 +9,10 @@ const KIWIS_BASE = "http://aklc.hydrotel.co.nz:8080/KiWIS/KiWIS";
 const TIMEOUT_MS = 8_000;
 const LIVE_PERIOD = "P48H";
 
-// GitHub raw URL of the file kept fresh by .github/workflows/fetch-rainfall.yml
-const GITHUB_CACHE_URL =
+// GitHub raw URL of the file kept fresh by .github/workflows/fetch-rainfall.yml.
+// Cache-busting param (?t=...) forces GitHub's CDN to return the latest commit.
+const GITHUB_CACHE_BASE =
   "https://raw.githubusercontent.com/dj-aklcons/rainfall-dashboard/main/data/cached-rainfall.json";
-// No max-age: serve any cached data regardless of age. Stale real telemetry >>
-// mock data. The cron keeps it fresh whenever KiWIS is reachable from Actions.
 
 interface KiWISRow {
   ts_id: string;
@@ -69,8 +68,10 @@ async function fetchStationLive(meta: typeof STATION_METAS[number]): Promise<Sta
 
 /** Returns cached stations from GitHub, or null if missing/empty. Serves any age — stale beats mock. */
 async function tryGitHubCache(): Promise<{ stations: Station[]; fetchedAt: string } | null> {
+  // Append timestamp to bust GitHub's CDN cache and always get the latest commit.
+  const url = `${GITHUB_CACHE_BASE}?t=${Date.now()}`;
   try {
-    const res = await fetch(GITHUB_CACHE_URL, { cache: "no-store" });
+    const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = (await res.json()) as CachedData;
     if (!data.stations?.length) throw new Error("empty");

@@ -2,10 +2,11 @@ export const runtime = "edge";
 
 const KIWIS_HTTP  = "http://aklc.hydrotel.co.nz:8080/KiWIS/KiWIS";
 const KIWIS_HTTPS = "https://aklc.hydrotel.co.nz/KiWIS/KiWIS";
+const GITHUB_CACHE_URL = "https://raw.githubusercontent.com/dj-aklcons/rainfall-dashboard/main/data/cached-rainfall.json";
 
-const TEST_TS_ID  = "648719"; // Auckland Central — one station for speed
+const TEST_TS_ID = "648719"; // Auckland Central only — fast probe
 
-function buildUrl(base: string, period: string) {
+function buildKiWISUrl(base: string, period: string) {
   const params = new URLSearchParams({
     service: "kisters", type: "queryServices",
     request: "getTimeseriesValues", datasource: "0",
@@ -28,7 +29,7 @@ async function probe(label: string, url: string, timeoutMs: number) {
     let dataPoints = 0;
     try { dataPoints = JSON.parse(text)?.[0]?.data?.length ?? 0; } catch { /* skip */ }
     return { label, status: res.status, elapsed, dataPoints, ok: res.ok && dataPoints > 0,
-      preview: text.slice(0, 300) };
+      preview: text.slice(0, 200) };
   } catch (err) {
     clearTimeout(timer);
     return { label, status: null, elapsed: Date.now() - t0, dataPoints: 0, ok: false,
@@ -36,20 +37,38 @@ async function probe(label: string, url: string, timeoutMs: number) {
   }
 }
 
+async function checkGitHubCache() {
+  try {
+    const url = `${GITHUB_CACHE_URL}?t=${Date.now()}`;
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = await res.json() as { fetchedAt?: string; stations?: { id: string; series?: unknown[] }[] };
+    const stations = (data.stations ?? []).map(s => ({
+      id: s.id, points: Array.isArray(s.series) ? s.series.length : 0,
+    }));
+    return { ok: stations.length > 0, fetchedAt: data.fetchedAt, stations };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export async function GET() {
-  // Run all probes in parallel so total wait ≤ slowest timeout (25s)
-  const [http8s, http25s, https8s] = await Promise.all([
-    probe("http-port8080-8s",  buildUrl(KIWIS_HTTP,  "P1D"), 8_000),
-    probe("http-port8080-25s", buildUrl(KIWIS_HTTP,  "P1D"), 25_000),
-    probe("https-port443-8s",  buildUrl(KIWIS_HTTPS, "P1D"), 8_000),
+  // Run all probes in parallel — total wait ≤ slowest timeout (25s)
+  const [cache, http8s, http25s, https8s] = await Promise.all([
+    checkGitHubCache(),
+    probe("kiwis-http-8s",  buildKiWISUrl(KIWIS_HTTP,  "P1D"), 8_000),
+    probe("kiwis-http-25s", buildKiWISUrl(KIWIS_HTTP,  "P1D"), 25_000),
+    probe("kiwis-https-8s", buildKiWISUrl(KIWIS_HTTPS, "P1D"), 8_000),
   ]);
 
   return Response.json({
     runtime: "edge",
     timestamp: new Date().toISOString(),
-    // If http-25s succeeds but http-8s doesn't: KiWIS is slow to cloud IPs, just needs longer timeout.
-    // If https-443 succeeds: there's an HTTPS endpoint reachable from cloud.
-    // If all fail: KiWIS blocks all cloud infra regardless of timeout/protocol.
-    probes: [http8s, http25s, https8s],
+    // cache: is the GitHub-committed JSON reachable and does it have real stations?
+    cache,
+    // kiwis probes: can we reach KiWIS directly from Cloudflare Edge?
+    // http-25s: if this ok=true but http-8s ok=false, KiWIS is just slow → increase timeout
+    // https-8s: if this ok=true, HTTPS endpoint exists and fixes mixed-content for client-side fetch
+    kiwisProbes: [http8s, http25s, https8s],
   });
 }
