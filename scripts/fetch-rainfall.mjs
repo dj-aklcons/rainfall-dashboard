@@ -6,7 +6,7 @@
  * even when Vercel (AWS) cannot.
  */
 import http from "http";
-import { writeFileSync, mkdirSync } from "fs";
+import { writeFileSync, readFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -74,6 +74,14 @@ async function fetchStation(meta, attempt = 0) {
 }
 
 async function main() {
+  // Load the previous cache so we can preserve data for any station that fails this run.
+  let prevStations = {};
+  try {
+    const prev = JSON.parse(readFileSync(join(ROOT, "data/cached-rainfall.json"), "utf8"));
+    for (const s of (prev.stations ?? [])) prevStations[s.id] = s;
+    console.log(`Loaded previous cache with ${Object.keys(prevStations).length} station(s).`);
+  } catch { /* no previous cache — that's fine */ }
+
   console.log("Fetching rainfall data from KiWIS…");
   const results = await Promise.allSettled(STATIONS.map((s) => fetchStation(s)));
 
@@ -86,12 +94,19 @@ async function main() {
       stations.push(r.value);
       anyLive = true;
     } else {
-      console.error(`  ✗ ${STATIONS[i].id}: ${r.reason?.message ?? r.reason}`);
+      const errMsg = r.reason?.message ?? r.reason;
+      // Preserve previous data for this station so the cache doesn't lose it.
+      if (prevStations[STATIONS[i].id]) {
+        console.warn(`  ✗ ${STATIONS[i].id}: ${errMsg} — keeping previous data`);
+        stations.push(prevStations[STATIONS[i].id]);
+      } else {
+        console.error(`  ✗ ${STATIONS[i].id}: ${errMsg} — no previous data to fall back to`);
+      }
     }
   }
 
   if (!anyLive) {
-    console.error("No stations returned data — not updating cache.");
+    console.error("No stations returned fresh data — not updating cache.");
     process.exit(1);
   }
 
