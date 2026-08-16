@@ -1,4 +1,4 @@
-export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 const KIWIS_BASE = "http://aklc.hydrotel.co.nz:8080/KiWIS/KiWIS";
 const TIMEOUT_MS = 8_000;
@@ -46,6 +46,7 @@ export async function GET() {
   );
 
   return Response.json({
+    runtime: "edge",
     timestamp: new Date().toISOString(),
     stations: results.map((r) => r.status === "fulfilled" ? r.value : { error: String(r.reason) }),
   });

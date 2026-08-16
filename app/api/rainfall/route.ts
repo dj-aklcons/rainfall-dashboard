@@ -1,11 +1,10 @@
 import { STATION_METAS, buildMockStations } from "@/lib/data";
 import type { Station, DataPoint } from "@/lib/types";
 
-export const dynamic = "force-dynamic";
+// Edge Runtime runs on Cloudflare's network (not AWS Lambda).
+// Cloudflare has different IP ranges — may reach KiWIS where AWS/Azure cannot.
+export const runtime = "edge";
 
-// KiWIS direct fetch — P48H matches the disaster-app payload size (49h, 1 station).
-// Requesting P30D (720 pts × 4 stations) takes >8s and hits our timeout.
-// The GitHub Actions cron fetches the full P30D and caches it below.
 const KIWIS_BASE = "http://aklc.hydrotel.co.nz:8080/KiWIS/KiWIS";
 const TIMEOUT_MS = 8_000;
 const LIVE_PERIOD = "P48H";
