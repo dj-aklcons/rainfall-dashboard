@@ -7,8 +7,11 @@ import type { Station, DataPoint } from "@/lib/types";
 export const runtime = "edge";
 
 const KIWIS_BASE = "http://aklc.hydrotel.co.nz:8080/KiWIS/KiWIS";
-// 6 s per station × 4 stations = 24 s max, well within Edge's 30 s limit.
-const TIMEOUT_MS = 6_000;
+// KiWIS response time from Cloudflare Edge varies 6–9 s. Give each station 9 s.
+const TIMEOUT_MS = 9_000;
+// Hard budget for the whole sequential loop — stay well under Edge's 30 s ceiling.
+// If a station would exceed this, skip it (falls back to mock for that station).
+const TOTAL_BUDGET_MS = 26_000;
 // P24H: the user wants fresh last-24-hours data; 24 pts is a small payload.
 // The GitHub Actions cron fetches full P30D for historical charts.
 const LIVE_PERIOD = "P24H";
@@ -72,15 +75,25 @@ async function fetchStationLive(meta: typeof STATION_METAS[number]): Promise<Sta
 /**
  * Fetch stations one at a time — KiWIS rejects concurrent requests from the same
  * IP with HTTP 500. Sequential keeps us under its concurrency limit.
- * Returns partial results: fulfilled stations plus mock fallbacks for failures.
+ * Respects TOTAL_BUDGET_MS so we never hit Edge Runtime's 30 s ceiling.
+ * Returns partial results: live stations where fetched, mock fallbacks for the rest.
  */
 async function fetchStationsSequential(): Promise<{ stations: Station[]; errors: string[]; anyLive: boolean }> {
   const mockStations = buildMockStations();
   const stations: Station[] = [];
   const errors: string[] = [];
   let anyLive = false;
+  const start = Date.now();
 
   for (const meta of STATION_METAS) {
+    const elapsed = Date.now() - start;
+    if (elapsed + TIMEOUT_MS > TOTAL_BUDGET_MS) {
+      // Not enough budget left — skip this station rather than risk a timeout
+      const msg = "budget exhausted";
+      errors.push(`${meta.id}: ${msg}`);
+      stations.push(mockStations.find((s) => s.id === meta.id) ?? mockStations[0]);
+      continue;
+    }
     try {
       const station = await fetchStationLive(meta);
       stations.push(station);
