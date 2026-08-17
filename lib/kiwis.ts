@@ -8,8 +8,10 @@ import type { Station, DataPoint } from "@/lib/types";
 const KIWIS_BASE = "http://aklc.hydrotel.co.nz:8080/KiWIS/KiWIS";
 // KiWIS response time from Cloudflare Edge varies 6–9 s. Give each station 9 s.
 const TIMEOUT_MS = 9_000;
-// Hard budget for the whole sequential loop — stay well under Edge's 30 s ceiling.
-const TOTAL_BUDGET_MS = 26_000;
+// Hard budget for the whole sequential loop — must complete well under Edge's 30 s
+// ceiling so the response is returned before Vercel terminates the function.
+// 22 s leaves 8 s of headroom for serialisation and network overhead.
+const TOTAL_BUDGET_MS = 22_000;
 // P24H: latest 24 hours of hourly data — small payload, used for live top-up.
 export const LIVE_PERIOD = "P24H";
 

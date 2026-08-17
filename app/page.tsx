@@ -32,22 +32,29 @@ function setLS(key: string, value: unknown) {
  * Merge a fresh live 24-h fetch on top of a cached 30-day base.
  * For each station: trim any cached points that fall inside the live window,
  * then append the live points. Stations where live failed keep their cache data.
+ * Defensively handles missing/malformed live data so it can never crash the page.
  */
 function mergeWithLive(cached: Station[], live: Station[]): Station[] {
+  if (!Array.isArray(live) || live.length === 0) return cached;
   return cached.map((cachedStation) => {
-    const liveStation = live.find((s) => s.id === cachedStation.id);
-    if (!liveStation || liveStation.dataUnavailable || !liveStation.series.length) {
-      return cachedStation; // live failed for this station — keep cache as-is
+    try {
+      const liveStation = live.find((s) => s.id === cachedStation.id);
+      if (!liveStation || liveStation.dataUnavailable || !liveStation.series?.length) {
+        return cachedStation; // live failed for this station — keep cache as-is
+      }
+      const liveStartMs = new Date(liveStation.series[0].timestamp).getTime();
+      if (isNaN(liveStartMs)) return cachedStation;
+      const trimmed = cachedStation.series.filter(
+        (p) => new Date(p.timestamp).getTime() < liveStartMs
+      );
+      return {
+        ...cachedStation,
+        series: [...trimmed, ...liveStation.series],
+        dataUnavailable: false,
+      };
+    } catch {
+      return cachedStation; // never let a merge error remove cache data
     }
-    const liveStartMs = new Date(liveStation.series[0].timestamp).getTime();
-    const trimmed = cachedStation.series.filter(
-      (p) => new Date(p.timestamp).getTime() < liveStartMs
-    );
-    return {
-      ...cachedStation,
-      series: [...trimmed, ...liveStation.series],
-      dataUnavailable: false,
-    };
   });
 }
 
@@ -123,7 +130,7 @@ export default function App() {
       const res = await fetch("/api/rainfall/live");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = (await res.json()) as { stations: Station[]; source: string; errors?: string[] };
-      if (json.source !== "unavailable") {
+      if (json.source !== "unavailable" && Array.isArray(json.stations)) {
         setStations((prev) => mergeWithLive(prev, json.stations));
         setLastUpdated(new Date());
       }
