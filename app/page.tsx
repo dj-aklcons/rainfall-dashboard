@@ -28,12 +28,37 @@ function setLS(key: string, value: unknown) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* noop */ }
 }
 
+/**
+ * Merge a fresh live 24-h fetch on top of a cached 30-day base.
+ * For each station: trim any cached points that fall inside the live window,
+ * then append the live points. Stations where live failed keep their cache data.
+ */
+function mergeWithLive(cached: Station[], live: Station[]): Station[] {
+  return cached.map((cachedStation) => {
+    const liveStation = live.find((s) => s.id === cachedStation.id);
+    if (!liveStation || liveStation.dataUnavailable || !liveStation.series.length) {
+      return cachedStation; // live failed for this station — keep cache as-is
+    }
+    const liveStartMs = new Date(liveStation.series[0].timestamp).getTime();
+    const trimmed = cachedStation.series.filter(
+      (p) => new Date(p.timestamp).getTime() < liveStartMs
+    );
+    return {
+      ...cachedStation,
+      series: [...trimmed, ...liveStation.series],
+      dataUnavailable: false,
+    };
+  });
+}
+
 export default function App() {
   const [view, setView] = useState<View>("dashboard");
   const [openedId, setOpenedId] = useState<string | null>(null);
-  const [range, setRange] = useState<Range>("24h");
+  // Default to 7d — we load 30 days of history, so show a meaningful window by default.
+  const [range, setRange] = useState<Range>("7d");
   const [unit, setUnit] = useState<Unit>("rate");
   const [refreshing, setRefreshing] = useState(false);
+  const [liveLoading, setLiveLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [filter, setFilter] = useState(["central", "waitakere", "takapuna", "manukau"]);
 
@@ -73,21 +98,40 @@ export default function App() {
 
   const fetchRainfallData = useCallback(async () => {
     setRefreshing(true);
+
+    // ── Phase 1: GitHub cache (fast ~1 s) — render charts immediately ──────────
     try {
       const res = await fetch("/api/rainfall");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as { stations: Station[]; isMockData: boolean; errors?: string[] };
+      const json = (await res.json()) as { stations: Station[]; source: string; errors?: string[] };
       setStations(json.stations);
       setApiErrors(json.errors ?? []);
       setLastUpdated(new Date());
     } catch {
-      // API unreachable or Vercel function timed out — show unavailable stubs.
+      // API fully unreachable — show unavailable stubs.
       const { STATION_METAS } = await import("@/lib/data");
       setStations(STATION_METAS.map((m) => ({ ...m, series: [], dataUnavailable: true as const })));
       setLastUpdated(new Date());
     } finally {
       setRefreshing(false);
       setDataLoading(false);
+    }
+
+    // ── Phase 2: Live KiWIS top-up (slow ~25 s) — runs in background ───────────
+    setLiveLoading(true);
+    try {
+      const res = await fetch("/api/rainfall/live");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = (await res.json()) as { stations: Station[]; source: string; errors?: string[] };
+      if (json.source !== "unavailable") {
+        setStations((prev) => mergeWithLive(prev, json.stations));
+        setLastUpdated(new Date());
+      }
+      if (json.errors?.length) setApiErrors(json.errors);
+    } catch {
+      // Live fetch failed — cache data is still displayed.
+    } finally {
+      setLiveLoading(false);
     }
   }, []);
 
@@ -133,6 +177,24 @@ export default function App() {
     <div className="app">
       <Header lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={fetchRainfallData}
         theme={theme} onThemeToggle={() => setTheme(theme === "dark" ? "light" : "dark")} />
+
+      {liveLoading && (
+        <div style={{
+          background: "color-mix(in oklab, var(--accent) 8%, transparent)",
+          borderBottom: "1px solid color-mix(in oklab, var(--accent) 30%, transparent)",
+          color: "var(--accent)",
+          fontFamily: "var(--font-mono)",
+          fontSize: 11,
+          padding: "6px 14px",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          letterSpacing: "0.05em",
+        }}>
+          <span className="status-dot loading" style={{ flexShrink: 0 }} />
+          RETRIEVING LATEST DATA…
+        </div>
+      )}
 
       {!openedStation && (
         <ControlsBar view={view} onView={handleView} range={range} onRange={setRange}

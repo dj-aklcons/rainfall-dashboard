@@ -22,7 +22,7 @@ export default function Header({ lastUpdated, refreshing, onRefresh, theme, onTh
           <strong>Auckland Rainfall</strong>
           <span>LIBRARIES · CONSERVATION MONITORING</span>
         </div>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-muted)", opacity: 0.5, marginLeft: 8, alignSelf: "flex-end", paddingBottom: 2 }}>v17</span>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-muted)", opacity: 0.5, marginLeft: 8, alignSelf: "flex-end", paddingBottom: 2 }}>v18</span>
       </div>
       <div className="topbar-right">
         <div className="status-pill" title="Connected to hydrotel telemetry feed">
