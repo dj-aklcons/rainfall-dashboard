@@ -41,6 +41,17 @@ function buildUrl(tsId: string, period = LIVE_PERIOD): string {
   return `${KIWIS_BASE}?${params.toString()}&ts_id=${tsId}~Rainfall.HOURTOT`;
 }
 
+/**
+ * Guarantees all four STATION_METAS are present in the result.
+ * Any station missing from `fetched` is filled with its mock counterpart,
+ * so the frontend always receives exactly 4 stations and never renders a blank.
+ */
+function fillMissingStations(fetched: Station[], mocks: Station[]): Station[] {
+  return STATION_METAS.map(
+    (meta) => fetched.find((s) => s.id === meta.id) ?? mocks.find((s) => s.id === meta.id) ?? mocks[0]
+  );
+}
+
 function parseKiWISRow(row: KiWISRow, meta: typeof STATION_METAS[number]): Station {
   const series: DataPoint[] = row.data.map(([timestamp, value, qualityCode]) => ({
     timestamp,
@@ -152,12 +163,15 @@ function jsonResponse(body: unknown, cache = false) {
 }
 
 export async function GET() {
+  const mockStations = buildMockStations();
+
   // 1. Try GitHub cache — full P30D history for charts.
   //    Requires GITHUB_TOKEN env var (private repo) or make the repo public.
   const cached = await tryGitHubCache();
   if (cached) {
     return jsonResponse({
-      stations: cached.stations,
+      // Fill any station the cron missed with mock data so all 4 always appear.
+      stations: fillMissingStations(cached.stations, mockStations),
       isMockData: false,
       source: "cache",
       cacheAge: cached.fetchedAt,
@@ -174,6 +188,5 @@ export async function GET() {
   }
 
   // 3. Last resort — mock data (not cached — we want to retry KiWIS on next load)
-  const mockStations = buildMockStations();
   return jsonResponse({ stations: mockStations, isMockData: true, source: "mock", errors }, false);
 }

@@ -4,9 +4,15 @@ const KIWIS_HTTP  = "http://aklc.hydrotel.co.nz:8080/KiWIS/KiWIS";
 const KIWIS_HTTPS = "https://aklc.hydrotel.co.nz/KiWIS/KiWIS";
 const GITHUB_CACHE_URL = "https://raw.githubusercontent.com/dj-aklcons/rainfall-dashboard/main/data/cached-rainfall.json";
 
-const TEST_TS_ID = "648719"; // Auckland Central only — fast probe
+// Test all 4 stations to find if Takapuna specifically has a KiWIS issue
+const STATIONS = [
+  { id: "central",   ts_id: "648719" },
+  { id: "waitakere", ts_id: "647722" },
+  { id: "takapuna",  ts_id: "648612" },
+  { id: "manukau",   ts_id: "649940" },
+];
 
-function buildKiWISUrl(base: string, period: string) {
+function buildKiWISUrl(base: string, period: string, tsId = "648719") {
   const params = new URLSearchParams({
     service: "kisters", type: "queryServices",
     request: "getTimeseriesValues", datasource: "0",
@@ -14,7 +20,7 @@ function buildKiWISUrl(base: string, period: string) {
     returnfields: "Timestamp,Value,Quality Code",
     timezone: "Etc/GMT-12",
   });
-  return `${base}?${params.toString()}&ts_id=${TEST_TS_ID}~Rainfall.HOURTOT`;
+  return `${base}?${params.toString()}&ts_id=${tsId}~Rainfall.HOURTOT`;
 }
 
 async function probe(label: string, url: string, timeoutMs: number) {
@@ -53,22 +59,21 @@ async function checkGitHubCache() {
 }
 
 export async function GET() {
-  // Run all probes in parallel — total wait ≤ slowest timeout (25s)
-  const [cache, http8s, http25s, https8s] = await Promise.all([
-    checkGitHubCache(),
-    probe("kiwis-http-8s",  buildKiWISUrl(KIWIS_HTTP,  "P1D"), 8_000),
-    probe("kiwis-http-25s", buildKiWISUrl(KIWIS_HTTP,  "P1D"), 25_000),
-    probe("kiwis-https-8s", buildKiWISUrl(KIWIS_HTTPS, "P1D"), 8_000),
-  ]);
+  // Check cache and all 4 stations sequentially (concurrent requests get rejected by KiWIS)
+  const cache = await checkGitHubCache();
+
+  const stationResults = [];
+  for (const s of STATIONS) {
+    const url = buildKiWISUrl(KIWIS_HTTP, "P1D", s.ts_id);
+    const result = await probe(`${s.id} (${s.ts_id})`, url, 12_000);
+    stationResults.push(result);
+  }
 
   return Response.json({
     runtime: "edge",
     timestamp: new Date().toISOString(),
-    // cache: is the GitHub-committed JSON reachable and does it have real stations?
     cache,
-    // kiwis probes: can we reach KiWIS directly from Cloudflare Edge?
-    // http-25s: if this ok=true but http-8s ok=false, KiWIS is just slow → increase timeout
-    // https-8s: if this ok=true, HTTPS endpoint exists and fixes mixed-content for client-side fetch
-    kiwisProbes: [http8s, http25s, https8s],
+    // Sequential per-station probes — shows if Takapuna has a KiWIS data issue
+    stations: stationResults,
   });
 }
