@@ -39,7 +39,6 @@ export default function App() {
 
   const [stations, setStations] = useState<Station[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
-  const [isMockData, setIsMockData] = useState(false);
   const [apiErrors, setApiErrors] = useState<string[]>([]);
 
   const [theme, setTheme] = useState<Theme>("light");
@@ -79,15 +78,12 @@ export default function App() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = (await res.json()) as { stations: Station[]; isMockData: boolean; errors?: string[] };
       setStations(json.stations);
-      setIsMockData(json.isMockData);
       setApiErrors(json.errors ?? []);
       setLastUpdated(new Date());
     } catch {
-      // API unreachable or Vercel function timed out — load mock data client-side
-      // so the dashboard always has something to display.
-      const { buildMockStations } = await import("@/lib/data");
-      setStations(buildMockStations());
-      setIsMockData(true);
+      // API unreachable or Vercel function timed out — show unavailable stubs.
+      const { STATION_METAS } = await import("@/lib/data");
+      setStations(STATION_METAS.map((m) => ({ ...m, series: [], dataUnavailable: true as const })));
       setLastUpdated(new Date());
     } finally {
       setRefreshing(false);
@@ -137,29 +133,6 @@ export default function App() {
     <div className="app">
       <Header lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={fetchRainfallData}
         theme={theme} onThemeToggle={() => setTheme(theme === "dark" ? "light" : "dark")} />
-
-      {isMockData && (
-        <div style={{
-          background: "color-mix(in oklab, var(--warn) 12%, transparent)",
-          border: "1px solid var(--warn)",
-          color: "var(--warn)",
-          fontFamily: "var(--font-mono)",
-          fontSize: 12,
-          padding: "8px 14px",
-          marginBottom: "var(--gap)",
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-        }}>
-          <span style={{ fontWeight: 600 }}>DEMO DATA</span>
-          · Live KiWIS telemetry unavailable — showing simulated rainfall data
-          {apiErrors.length > 0 && (
-            <span style={{ opacity: 0.7, marginLeft: 8 }}>
-              ({apiErrors.join(" | ")})
-            </span>
-          )}
-        </div>
-      )}
 
       {!openedStation && (
         <ControlsBar view={view} onView={handleView} range={range} onRange={setRange}

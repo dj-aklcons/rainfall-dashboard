@@ -16,6 +16,8 @@ export interface StationMeta {
 
 export interface Station extends StationMeta {
   series: DataPoint[];
+  /** True when the station's KiWIS data could not be fetched — series will be empty. */
+  dataUnavailable?: boolean;
 }
 
 export type View = "dashboard" | "map" | "heatmap" | "alerts";

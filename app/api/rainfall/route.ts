@@ -1,4 +1,4 @@
-import { STATION_METAS, buildMockStations } from "@/lib/data";
+import { STATION_METAS } from "@/lib/data";
 import type { Station, DataPoint } from "@/lib/types";
 
 // Edge Runtime runs on Cloudflare's network (not AWS Lambda).
@@ -41,14 +41,18 @@ function buildUrl(tsId: string, period = LIVE_PERIOD): string {
   return `${KIWIS_BASE}?${params.toString()}&ts_id=${tsId}~Rainfall.HOURTOT`;
 }
 
+/** Station stub returned when KiWIS data is unavailable — empty series, flagged for the UI. */
+function makeUnavailable(meta: typeof STATION_METAS[number]): Station {
+  return { ...meta, series: [], dataUnavailable: true };
+}
+
 /**
- * Guarantees all four STATION_METAS are present in the result.
- * Any station missing from `fetched` is filled with its mock counterpart,
- * so the frontend always receives exactly 4 stations and never renders a blank.
+ * Guarantees all four STATION_METAS are present.
+ * Any station missing from `fetched` gets an unavailable stub (not mock data).
  */
-function fillMissingStations(fetched: Station[], mocks: Station[]): Station[] {
+function fillMissingStations(fetched: Station[]): Station[] {
   return STATION_METAS.map(
-    (meta) => fetched.find((s) => s.id === meta.id) ?? mocks.find((s) => s.id === meta.id) ?? mocks[0]
+    (meta) => fetched.find((s) => s.id === meta.id) ?? makeUnavailable(meta)
   );
 }
 
@@ -90,7 +94,6 @@ async function fetchStationLive(meta: typeof STATION_METAS[number]): Promise<Sta
  * Returns partial results: live stations where fetched, mock fallbacks for the rest.
  */
 async function fetchStationsSequential(): Promise<{ stations: Station[]; errors: string[]; anyLive: boolean }> {
-  const mockStations = buildMockStations();
   const stations: Station[] = [];
   const errors: string[] = [];
   let anyLive = false;
@@ -99,10 +102,8 @@ async function fetchStationsSequential(): Promise<{ stations: Station[]; errors:
   for (const meta of STATION_METAS) {
     const elapsed = Date.now() - start;
     if (elapsed + TIMEOUT_MS > TOTAL_BUDGET_MS) {
-      // Not enough budget left — skip this station rather than risk a timeout
-      const msg = "budget exhausted";
-      errors.push(`${meta.id}: ${msg}`);
-      stations.push(mockStations.find((s) => s.id === meta.id) ?? mockStations[0]);
+      errors.push(`${meta.id}: budget exhausted`);
+      stations.push(makeUnavailable(meta));
       continue;
     }
     try {
@@ -113,7 +114,7 @@ async function fetchStationsSequential(): Promise<{ stations: Station[]; errors:
       const msg = err instanceof Error ? err.message : String(err);
       errors.push(`${meta.id}: ${msg}`);
       console.error(`[rainfall] ${meta.id} failed: ${msg}`);
-      stations.push(mockStations.find((s) => s.id === meta.id) ?? mockStations[0]);
+      stations.push(makeUnavailable(meta));
     }
   }
 
@@ -163,15 +164,12 @@ function jsonResponse(body: unknown, cache = false) {
 }
 
 export async function GET() {
-  const mockStations = buildMockStations();
-
   // 1. Try GitHub cache — full P30D history for charts.
-  //    Requires GITHUB_TOKEN env var (private repo) or make the repo public.
+  //    Requires repo to be public, or GITHUB_TOKEN env var set in Vercel.
   const cached = await tryGitHubCache();
   if (cached) {
     return jsonResponse({
-      // Fill any station the cron missed with mock data so all 4 always appear.
-      stations: fillMissingStations(cached.stations, mockStations),
+      stations: fillMissingStations(cached.stations),
       isMockData: false,
       source: "cache",
       cacheAge: cached.fetchedAt,
@@ -183,10 +181,11 @@ export async function GET() {
   //    First caller in each 5-min window pays the ~25s cost; Vercel edge caches it for the rest.
   const { stations, errors, anyLive } = await fetchStationsSequential();
 
-  if (anyLive) {
-    return jsonResponse({ stations, isMockData: false, source: "live-24h", errors }, true);
-  }
-
-  // 3. Last resort — mock data (not cached — we want to retry KiWIS on next load)
-  return jsonResponse({ stations: mockStations, isMockData: true, source: "mock", errors }, false);
+  // Always return all 4 stations — failures get dataUnavailable:true (not mock data).
+  return jsonResponse({
+    stations,
+    isMockData: false,
+    source: anyLive ? "live-24h" : "unavailable",
+    errors,
+  }, anyLive); // only cache when at least one station has real data
 }

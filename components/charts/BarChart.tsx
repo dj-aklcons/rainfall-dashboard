@@ -26,6 +26,34 @@ export default function BarChart({ series, height = 110, accent, mode = "hourly"
   const W = 320, H = height, padX = 4;
   const padY = compact ? 8 : 12;
   const bottomAxis = compact ? 14 : 18;
+  const innerH = H - padY - bottomAxis;
+
+  // No-data state — render a diagonal-striped fill instead of bars
+  if (series.length === 0) {
+    const patId = `nodata-${height}`;
+    return (
+      <div className="chart-wrap" style={{ position: "relative" }}>
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
+          style={{ display: "block", width: "100%", height: "auto" }}>
+          <defs>
+            <pattern id={patId} patternUnits="userSpaceOnUse" width="10" height="10" patternTransform="rotate(45 0 0)">
+              <rect width="10" height="10" fill="transparent" />
+              <line x1="0" y1="0" x2="0" y2="10" stroke="var(--border)" strokeWidth="3" />
+            </pattern>
+          </defs>
+          <line x1={padX} x2={W - padX} y1={padY + innerH} y2={padY + innerH}
+            stroke="var(--border)" strokeWidth="1" />
+          <rect x={padX} y={padY} width={W - padX * 2} height={innerH}
+            fill={`url(#${patId})`} opacity={0.6} rx="2" />
+          <text x={W / 2} y={padY + innerH / 2 + 4} textAnchor="middle"
+            fontSize="10" fill="var(--text-muted)" fontFamily="var(--font-mono)"
+            style={{ userSelect: "none" }}>
+            no data
+          </text>
+        </svg>
+      </div>
+    );
+  }
 
   const data = useMemo(() => {
     if (mode === "cumulative") {
@@ -39,7 +67,6 @@ export default function BarChart({ series, height = 110, accent, mode = "hourly"
 
   const n = data.length;
   const innerW = W - padX * 2;
-  const innerH = H - padY - bottomAxis;
   const barW = Math.max(1, innerW / n - 1.5);
   const step = innerW / n;
   const gridY = [0, 0.5, 1].map((f) => padY + innerH * (1 - f));
