@@ -9,9 +9,10 @@ const KIWIS_BASE = "http://aklc.hydrotel.co.nz:8080/KiWIS/KiWIS";
 // KiWIS response time from Cloudflare Edge varies 6–9 s. Give each station 8 s.
 const TIMEOUT_MS = 8_000;
 // Hard budget for the whole sequential loop. Vercel Edge ceiling is 30 s;
-// 18 s gives a large safety margin for serialisation and network overhead.
-// At 8 s/station this allows 2 stations to complete before the budget cuts off.
-const TOTAL_BUDGET_MS = 18_000;
+// 24 s keeps us 6 s clear of it. At 8 s/station, worst case is 3 stations
+// each hitting their timeout (3 × 8 s = 24 s); station 4 is then skipped
+// by the budget guard. Rotation below ensures all stations get priority over time.
+const TOTAL_BUDGET_MS = 24_000;
 // P24H: latest 24 hours of hourly data — small payload, used for live top-up.
 export const LIVE_PERIOD = "P24H";
 
@@ -96,33 +97,45 @@ async function fetchStationLive(meta: typeof STATION_METAS[number]): Promise<Sta
  * Fetch stations one at a time — KiWIS rejects concurrent requests from the same
  * IP with HTTP 500. Sequential keeps us under its concurrency limit.
  * Respects TOTAL_BUDGET_MS so we never hit Edge Runtime's 30 s ceiling.
+ *
+ * Station order is rotated each minute so that all four stations get priority
+ * over time, rather than always skipping the last one or two.
+ * At KiWIS's typical 6–9 s response time we can fit 2–3 stations per call;
+ * rotation means manukau and takapuna aren't permanently stuck at the back.
  */
 export async function fetchStationsSequential(): Promise<{ stations: Station[]; errors: string[]; anyLive: boolean }> {
-  const stations: Station[] = [];
+  const fetched: Station[] = [];
   const errors: string[] = [];
   let anyLive = false;
   const start = Date.now();
 
-  for (const meta of STATION_METAS) {
+  // Rotate the attempt order by 1 position each minute. Over 4 minutes every
+  // station has had a turn going first (and therefore guaranteed a budget slot).
+  const rotationIndex = Math.floor(Date.now() / 60_000) % STATION_METAS.length;
+  const metas = [
+    ...STATION_METAS.slice(rotationIndex),
+    ...STATION_METAS.slice(0, rotationIndex),
+  ];
+
+  for (const meta of metas) {
     const elapsed = Date.now() - start;
     if (elapsed + TIMEOUT_MS > TOTAL_BUDGET_MS) {
       errors.push(`${meta.id}: budget exhausted`);
-      stations.push(makeUnavailable(meta));
-      continue;
+      continue; // no stub — leave gap so client falls back to cache for this station
     }
     try {
       const station = await fetchStationLive(meta);
-      stations.push(station);
+      fetched.push(station);
       anyLive = true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       errors.push(`${meta.id}: ${msg}`);
       console.error(`[rainfall] ${meta.id} failed: ${msg}`);
-      stations.push(makeUnavailable(meta));
     }
   }
 
-  return { stations, errors, anyLive };
+  // Always return all 4 stations in canonical order; missing ones are unavailable stubs.
+  return { stations: fillMissingStations(fetched), errors, anyLive };
 }
 
 /**
