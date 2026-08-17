@@ -8,7 +8,7 @@ import HeatmapView from "@/components/HeatmapView";
 import AlertsView from "@/components/AlertsView";
 import MapView from "@/components/MapView";
 import { STATION_METAS } from "@/lib/data";
-import type { View, Range, Unit, Theme, Density, AccentPreset, Station } from "@/lib/types";
+import type { View, Range, Unit, Theme, Density, AccentPreset, Station, DataSources } from "@/lib/types";
 
 /* Te Penapena accent presets */
 const ACCENT_PRESETS: AccentPreset[] = [
@@ -73,6 +73,7 @@ export default function App() {
   const [stations, setStations] = useState<Station[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [apiErrors, setApiErrors] = useState<string[]>([]);
+  const [dataSources, setDataSources] = useState<DataSources>({});
 
   const [theme, setTheme] = useState<Theme>("light");
   const [accent, setAccent] = useState("#124E4A");
@@ -106,15 +107,26 @@ export default function App() {
 
   const fetchRainfallData = useCallback(async () => {
     setRefreshing(true);
+    setDataSources({});
 
     // ── Phase 1: GitHub cache (fast ~1 s) — render charts immediately ──────────
     try {
       const res = await fetch("/api/rainfall");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as { stations: Station[]; source: string; errors?: string[] };
+      const json = (await res.json()) as { stations: Station[]; source: string; errors?: string[]; cacheAge?: string };
       setStations(json.stations);
       setApiErrors(json.errors ?? []);
       setLastUpdated(new Date());
+      if (json.cacheAge) {
+        setDataSources({
+          cache: {
+            fetchedAt: json.cacheAge,
+            stationIds: json.stations
+              .filter(s => !s.dataUnavailable && s.series.length > 0)
+              .map(s => s.id),
+          },
+        });
+      }
     } catch {
       // API fully unreachable — show unavailable stubs.
       setStations(STATION_METAS.map((m) => ({ ...m, series: [], dataUnavailable: true as const })));
@@ -133,6 +145,15 @@ export default function App() {
       if (json.source !== "unavailable" && Array.isArray(json.stations)) {
         setStations((prev) => mergeWithLive(prev, json.stations));
         setLastUpdated(new Date());
+        const liveIds = json.stations
+          .filter(s => !s.dataUnavailable && s.series.length > 0)
+          .map(s => s.id);
+        if (liveIds.length > 0) {
+          setDataSources(prev => ({
+            ...prev,
+            live: { fetchedAt: new Date().toISOString(), stationIds: liveIds },
+          }));
+        }
       }
       if (json.errors?.length) setApiErrors(json.errors);
     } catch {
@@ -183,7 +204,8 @@ export default function App() {
   return (
     <div className="app">
       <Header lastUpdated={lastUpdated} refreshing={refreshing} onRefresh={fetchRainfallData}
-        theme={theme} onThemeToggle={() => setTheme(theme === "dark" ? "light" : "dark")} />
+        theme={theme} onThemeToggle={() => setTheme(theme === "dark" ? "light" : "dark")}
+        dataSources={dataSources} />
 
       {liveLoading && (
         <div style={{

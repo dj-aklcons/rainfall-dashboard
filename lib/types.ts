@@ -31,3 +31,8 @@ export interface AccentPreset {
   dark: string;
   name: string;
 }
+
+export interface DataSources {
+  cache?: { fetchedAt: string; stationIds: string[] };
+  live?: { fetchedAt: string; stationIds: string[] };
+}
