@@ -7,6 +7,7 @@ import DrillView from "@/components/DrillView";
 import HeatmapView from "@/components/HeatmapView";
 import AlertsView from "@/components/AlertsView";
 import MapView from "@/components/MapView";
+import { STATION_METAS } from "@/lib/data";
 import type { View, Range, Unit, Theme, Density, AccentPreset, Station } from "@/lib/types";
 
 /* Te Penapena accent presets */
@@ -116,7 +117,6 @@ export default function App() {
       setLastUpdated(new Date());
     } catch {
       // API fully unreachable — show unavailable stubs.
-      const { STATION_METAS } = await import("@/lib/data");
       setStations(STATION_METAS.map((m) => ({ ...m, series: [], dataUnavailable: true as const })));
       setLastUpdated(new Date());
     } finally {
